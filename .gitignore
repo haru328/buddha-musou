@@ -1,0 +1,34 @@
+# Node / Vite
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary / local captures
+tmp/
+temp/
+*.tmp
+captures/
+profiles/
