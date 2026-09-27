@@ -1,98 +1,229 @@
 # 仏像無双（仮）
-## ブラウザ3Dアクションゲーム 基本仕様書・詳細設計書
+# プロトタイプ統合仕様書
 
-Version: 0.1.0  
-Status: MVP設計  
+Version: 1.0.0-prototype  
+Status: Implementation Ready  
 Target: Desktop Browser  
-Implementation: Codex
+Source of Truth: 本ファイル
 
 ---
 
-# 1. ゲームコンセプト
+# 1. 目的
 
-多数の落武者を、プレイヤーである戦う仏像が豪快になぎ倒すブラウザ3D群集アクション。
+本仕様書の目的は、ブラウザで動作する無双風3Dアクションゲーム
+「仏像無双（仮）」の**最低限遊べるプロトタイプ**を完成させることである。
 
-核となる体験：
+完成版の品質は要求しない。
 
-- 大量の敵に囲まれる
-- 一回の攻撃で複数の敵を吹き飛ばす
-- COMBOを伸ばす
-- 仏力を溜める
-- 仏技で大量の敵を一掃する
-- URLを開けばすぐ遊べる
+プロトタイプで検証するのは以下。
 
-既存の無双系作品の爽快感を参考にするが、既存作品のキャラクター・マップ・UI・名称・音声・画像・ゲームデータをコピーしない。
-
----
-
-# 2. MVP
-
-第一目標：**仏像を操作し、100体前後の落武者と戦い、300体倒すとステージクリア**。
-
-優先順位：
-
-1. 操作感
-2. 大量敵表示
-3. 攻撃の爽快感
-4. パフォーマンス
-5. UI
-6. グラフィック
-7. 細かな演出
+1. ブラウザ上で3Dアクションとして成立するか
+2. 多数の敵を表示できるか
+3. 複数敵を同時に吹き飛ばす爽快感が出るか
+4. Three.js構成で今後拡張可能か
+5. 共同開発可能なコード構造になっているか
 
 ---
 
-# 3. 技術
+# 2. コアコンセプト
+
+プレイヤーは戦う仏像。
+
+敵は大量の落武者。
+
+プレイヤーが錫杖を振り、
+
+```text
+敵が群がる
+↓
+攻撃する
+↓
+複数体へ同時Hit
+↓
+落武者が大量に吹き飛ぶ
+↓
+COMBOが増える
+↓
+仏力が溜まる
+↓
+仏技で大量撃破
+```
+
+という流れを中心体験とする。
+
+---
+
+# 3. プロトタイプ完成条件
+
+以下をすべて満たした時点でプロトタイプ完成とする。
+
+## 起動
+
+- `npm install` 成功
+- `npm run dev` でゲーム起動
+- Chromeで表示
+- Edgeで表示
+- consoleに進行不能エラーなし
+
+## ゲームフロー
+
+- タイトル画面
+- ゲーム開始
+- 戦闘
+- ステージクリア
+- ゲームオーバー
+- 再挑戦
+- タイトルへ戻る
+
+## プレイヤー
+
+- WASD移動
+- J通常攻撃
+- K強攻撃
+- L仏技
+- Space回避
+
+## 敵
+
+- 30体以上が同時出現
+- 目標50体前後
+- プレイヤーへ接近
+- 簡易Separation
+- 攻撃
+- 被ダメージ
+- 吹き飛ばし
+- 死亡
+- 再スポーン
+
+## 戦闘
+
+- 複数敵への同時Hit
+- Knockback
+- COMBO
+- 仏力
+- 仏技
+- プレイヤーHP
+
+## HUD
+
+- HP
+- 仏力
+- COMBO
+- 撃破数
+- 操作説明
+
+## 終了条件
+
+- 100体撃破でクリア
+- HP 0でゲームオーバー
+
+## 品質
+
+- 50体前後の敵との戦闘で30 FPS以上を目標
+- `npm run typecheck` 成功
+- `npm test` 成功
+- `npm run build` 成功
+
+---
+
+# 4. プロトタイプで作らないもの
+
+以下は明確にスコープ外。
+
+- 完成版3Dモデル
+- 完成版キャラクターアニメーション
+- BGM
+- 効果音
+- ボイス
+- 高品質パーティクル
+- 豪華なメニュー
+- ボス
+- 複数ステージ
+- アイテム
+- 装備
+- レベル
+- スキルツリー
+- ストーリー
+- 会話
+- セーブゲーム
+- オンライン機能
+- マルチプレイ
+- ランキングサーバー
+- スマートフォン操作
+- ゲームパッド
+- 課金
+- 高度な物理
+- NavMesh
+- 布シミュレーション
+
+「ついでに実装」は禁止する。
+
+---
+
+# 5. 技術スタック
 
 使用：
 
 - Vite
 - TypeScript
 - Three.js
-- HTML/CSS
 - Vitest
+- HTML
+- CSS
 
-MVPで使用しない：
+使用しない：
 
-- React / Vue / Angular
-- Unity WebGL / Unreal Engine
-- 重量級物理エンジン
-- サーバーサイド
-- DB
-
-UIはHTML/CSS、3DのみThree.js。
+- React
+- Vue
+- Angular
+- Unity
+- Unreal Engine
+- Cannon.js等の重量級物理
+- Backend
+- Database
 
 ---
 
-# 4. 対象環境
+# 6. 対象ブラウザ
 
-- Chrome
-- Edge
-- PCブラウザ優先
-- 基準1920×1080
-- 最低1280×720
+優先：
 
-Pixel ratio：
+1. Google Chrome
+2. Microsoft Edge
 
-```ts
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+PCキーボード操作を前提とする。
+
+---
+
+# 7. 基準解像度
+
+基準：
+
+```text
+1920 × 1080
 ```
 
+最低確認：
+
+```text
+1280 × 720
+```
+
+Canvasはウィンドウ追従。
+
+PixelRatio：
+
+```ts
+Math.min(window.devicePixelRatio, 1.5)
+```
+
+を初期値とする。
+
 ---
 
-# 5. パフォーマンス
+# 8. アセット方針
 
-- 目標60 FPS
-- 最低30 FPS
-- 通常80～100体
-- MVP最大100体を基本
-- 最適化後150体を検証
-- 将来200体以上
-
-敵数よりフレームレートを優先。
-
----
-
-# 6. アセット
+コンセプト資料：
 
 ```text
 public/assets/concept/buddha-musou-gameplay-concept.png
@@ -100,203 +231,393 @@ public/assets/concept/buddha-hero-sheet.png
 public/assets/concept/ochimusha-enemy-sheet.png
 ```
 
-## 仏像戦士
+これらは**見た目の参考資料**。
 
-- 金銅・木彫風
-- 仏像顔
-- 光背
-- 数珠
-- 袈裟
-- 武者風装甲
-- 赤い布
-- 大型錫杖/降魔杵
+ゲームへ直接3D表示する素材ではない。
 
-## 落武者
+プロトタイプではProcedural Geometryを使う。
 
-- 壊れた兜
-- 朽ちた鎧
-- 骸骨/亡者風
-- 赤く光る目
-- ボロ布
-- 刀
-- 赤黒い怨念
+---
 
-現在の画像はデザイン資料。MVPはThree.js Geometryによる簡易モデル。
+# 9. プレイヤー外観
 
-将来：
+簡易仏像。
+
+最低構成：
 
 ```text
-public/assets/models/hero/hero.glb
-public/assets/models/enemy/enemy.glb
+Root
+├─ Body
+├─ Head
+├─ LeftArm
+├─ RightArm
+├─ Legs
+├─ Staff
+└─ Halo
 ```
 
-ゲームロジックを3Dモデル固有構造へ依存させない。
+色：
+
+- 金
+- Bronze
+- Dark Brown
+- 赤布アクセント
+
+Halo：
+
+TorusGeometry。
+
+Staff：
+
+Cylinder + Torus等。
+
+攻撃時は腕やStaff rootを回転させるだけでもよい。
 
 ---
 
-# 7. GameState
+# 10. 敵外観
 
-```ts
-type GameState = 'boot' | 'title' | 'playing' | 'paused' | 'result';
-```
+簡易落武者。
+
+最低構成：
 
 ```text
-BOOT → TITLE → PLAYING → RESULT → TITLE
-                   ↕
-                 PAUSED
+Root / Instance
+├─ Body
+├─ Head
+├─ Helmet
+└─ Sword
+```
+
+色：
+
+- 黒
+- Dark Gray
+- Rust Brown
+- Dark Red
+
+完成版Skeleton Animationは不要。
+
+---
+
+# 11. ステージ
+
+名称：
+
+```text
+荒廃した寺院
+```
+
+プロトタイプでは簡略化。
+
+サイズ：
+
+```text
+70 × 70
+```
+
+プレイ可能範囲：
+
+```text
+X = -33 ～ +33
+Z = -33 ～ +33
+```
+
+構成：
+
+- Ground
+- 外周の簡易柱
+- 簡易鳥居
+- 石灯籠風オブジェクト数個
+
+中央戦闘域には移動を妨げる大型障害物を置かない。
+
+---
+
+# 12. GameState
+
+```ts
+type GameState =
+  | 'boot'
+  | 'title'
+  | 'playing'
+  | 'paused'
+  | 'result';
+```
+
+状態：
+
+```text
+BOOT
+↓
+TITLE
+↓
+PLAYING
+↓
+RESULT
+↓
+TITLE / RETRY
+```
+
+ESC：
+
+```text
+PLAYING ↔ PAUSED
 ```
 
 ---
 
-# 8. 勝敗
+# 13. タイトル画面
 
-- 300体撃破：CLEAR
-- HP 0：GAME OVER
+最低表示：
 
-```ts
-const CLEAR_KILLS = 300;
+```text
+仏像無双（仮）
+
+[ゲーム開始]
+
+WASD 移動
+J 攻撃
+K 強攻撃
+L 仏技
+SPACE 回避
 ```
+
+Enterまたはボタンで開始。
 
 ---
 
-# 9. プレイヤー
+# 14. Player Config
+
+初期値：
 
 ```ts
-const PLAYER_CONFIG = {
+export const PLAYER_CONFIG = {
   maxHp: 1000,
   moveSpeed: 8,
   rotationSpeed: 12,
+
   dodgeSpeed: 16,
   dodgeDuration: 0.30,
   dodgeInvincibleDuration: 0.25,
   dodgeCooldown: 0.50,
+
+  hitInvincibleDuration: 0.35,
+
   buddhistPowerMax: 100,
 };
 ```
 
-操作：
+---
 
-```text
-WASD 移動
-J 通常攻撃
-K 強攻撃
-L 仏技
-Space 回避
-ESC Pause
+# 15. Player State
+
+```ts
+type PlayerState =
+  | 'idle'
+  | 'move'
+  | 'attack'
+  | 'strongAttack'
+  | 'skill'
+  | 'dodge'
+  | 'stagger'
+  | 'dead';
 ```
-
-移動はカメラ基準。
 
 ---
 
-# 10. 通常攻撃
+# 16. 操作
 
-J。3段攻撃。
+```text
+W / ↑     前
+S / ↓     後
+A / ←     左
+D / →     右
+
+J         通常攻撃
+K         強攻撃
+L         仏技
+Space     回避
+Esc       Pause
+F3        Debug表示
+```
+
+---
+
+# 17. 移動
+
+カメラ基準移動。
+
+Wは画面奥。
+
+移動方向へPlayerを回転。
+
+Stage境界を超えない。
+
+---
+
+# 18. 通常攻撃
+
+J。
+
+3段コンボ。
+
+バランス：
 
 ```ts
-const NORMAL_ATTACKS = [
-  { damage: 40, radius: 3.0, knockback: 3 },
-  { damage: 55, radius: 3.5, knockback: 4 },
-  { damage: 75, radius: 4.5, knockback: 8 },
+export const NORMAL_ATTACKS = [
+  {
+    damage: 40,
+    radius: 3.0,
+    arcDeg: 110,
+    knockback: 3,
+  },
+  {
+    damage: 55,
+    radius: 3.5,
+    arcDeg: 130,
+    knockback: 4,
+  },
+  {
+    damage: 80,
+    radius: 4.5,
+    arcDeg: 170,
+    knockback: 8,
+  },
 ];
 ```
 
-1・2段目：前方扇形。
-3段目：広い前方範囲。
-
-武器Meshとの厳密な衝突ではなくゲーム用HitVolume。
+3段目は特に広くする。
 
 ---
 
-# 11. 強攻撃
+# 19. 攻撃タイミング
+
+厳密な格闘ゲームタイミングは不要。
+
+参考：
+
+```text
+Attack 1 total ≒ 0.45 sec
+Attack 2 total ≒ 0.48 sec
+Attack 3 total ≒ 0.60 sec
+```
+
+入力Buffer：
+
+```ts
+0.25 sec
+```
+
+攻撃中にJが押されたら次段を予約できる。
+
+---
+
+# 20. 強攻撃
 
 K。
 
+全周囲に近い攻撃。
+
 ```ts
-const STRONG_ATTACK = {
+export const STRONG_ATTACK = {
   damage: 120,
   radius: 6,
-  cooldown: 1.2,
   knockback: 12,
+  cooldown: 1.2,
 };
 ```
 
-ほぼ全周攻撃。大量の敵を吹き飛ばす。
+一度に5～10体以上Hitできる状況を作る。
 
 ---
 
-# 12. 仏技
+# 21. 仏技
 
-L。名称：**仏光陣**。
+L。
+
+名称：
+
+```text
+仏光陣
+```
+
+仏力100で発動。
 
 ```ts
-const BUDDHA_SKILL = {
+export const BUDDHA_SKILL = {
   damage: 300,
-  radius: 14,
+  radius: 12,
   knockback: 20,
   powerCost: 100,
 };
 ```
 
-演出：
-
-- 光背発光
-- 金色リング
-- 地面光輪
-- 敵を外側へ吹き飛ばす
+周囲の敵を一気に外方向へ吹き飛ばす。
 
 ---
 
-# 13. 仏力
+# 22. 仏力
 
-- Hit：+2
-- Kill：+3
-- 最大100
-- 100で仏技可能
+Hit：
+
+```text
++2
+```
+
+Kill：
+
+```text
++3
+```
+
+最大：
+
+```text
+100
+```
+
+Skill発動で0。
 
 ---
 
-# 14. 回避
+# 23. 回避
 
 Space。
 
-- duration 0.30
-- invincible 0.25
-- cooldown 0.50
+移動入力方向へdash。
 
-入力方向へダッシュ。
-
----
-
-# 15. 攻撃定義
+入力なしならPlayer前方。
 
 ```ts
-interface AttackDefinition {
-  damage: number;
-  radius: number;
-  arc?: number;
-  knockback: number;
-  duration: number;
-}
+duration = 0.30
+invincible = 0.25
+cooldown = 0.50
 ```
 
 ---
 
-# 16. 敵
+# 24. Enemy Config
 
 ```ts
-const ENEMY_CONFIG = {
+export const ENEMY_CONFIG = {
   maxHp: 100,
   moveSpeedMin: 2.2,
-  moveSpeedMax: 3.4,
+  moveSpeedMax: 3.2,
+
   attackDamage: 15,
   attackDistance: 1.8,
+
   attackIntervalMin: 1.5,
   attackIntervalMax: 2.5,
+
+  separationRadius: 1.2,
 };
 ```
 
-AI：
+---
+
+# 25. Enemy State
 
 ```ts
 type EnemyState =
@@ -308,234 +629,557 @@ type EnemyState =
   | 'dead';
 ```
 
-CHASE：Playerへ接近。
-ATTACK：1.8以内。攻撃間隔をランダム化。
-STAGGER：0.2秒程度。
-KNOCKBACK：velocityへ加算し減衰。
-DEAD：非表示後Poolへ戻す。
+---
 
-近隣Enemyが約1.2以内なら簡易Separation。
+# 26. Enemy AI
+
+基本：
+
+```text
+Spawn
+↓
+Chase
+↓
+Attack
+↓
+Cooldown
+↓
+Chase
+```
+
+被Hit：
+
+```text
+Stagger / Knockback
+```
+
+HP 0：
+
+```text
+Dead
+```
 
 ---
 
-# 17. スポーン
+# 27. 敵追跡
+
+Playerへ直線的に接近。
+
+NavMesh不要。
 
 ```ts
-const SPAWN_CONFIG = {
-  initialEnemies: 40,
-  targetEnemies: 80,
-  maxEnemies: 100,
-  minSpawnDistance: 15,
-  maxSpawnDistance: 35,
+desiredVelocity = directionToPlayer * speed;
+```
+
+---
+
+# 28. Separation
+
+近いEnemy同士を軽く離す。
+
+全Enemy総当たりは禁止。
+
+Spatial Hashを使用。
+
+---
+
+# 29. Enemy Attack Slot
+
+同時に攻撃できるEnemy数：
+
+```ts
+MAX_ATTACKERS = 6;
+```
+
+Attack Slotが取れないEnemyはPlayer周囲へ接近するだけ。
+
+100体が同時に殴る状態を防ぐ。
+
+---
+
+# 30. Enemy Attack
+
+距離：
+
+```text
+1.8以下
+```
+
+でAttack候補。
+
+予備動作：
+
+```text
+0.35 sec
+```
+
+Hit時にPlayerが無敵でなければDamage。
+
+---
+
+# 31. Spawn
+
+初期：
+
+```text
+20体
+```
+
+目標：
+
+```text
+50体
+```
+
+最大：
+
+```text
+60体
+```
+
+プロトタイプでは50体前後を正式目標とする。
+
+設定：
+
+```ts
+export const SPAWN_CONFIG = {
+  initialEnemies: 20,
+  targetEnemies: 50,
+  maxEnemies: 60,
+
+  minSpawnDistance: 14,
+  maxSpawnDistance: 28,
+
   spawnBatch: 5,
   interval: 1,
 };
 ```
 
-カメラ正面の突然出現を避ける。
+---
+
+# 32. クリア条件
+
+プロトタイプでは：
+
+```ts
+CLEAR_KILLS = 100;
+```
+
+100体撃破でクリア。
+
+完成版MVPでは300へ増加可能。
 
 ---
 
-# 18. 大量敵最適化
+# 33. 敗北条件
 
-必須：
+Player HP 0。
 
-- SpatialHashGrid
-- ObjectPool
-- InstancedMesh
-- 1本のrequestAnimationFrame
+```text
+GAME OVER
+```
 
-禁止：
+---
 
-- EnemyごとのrequestAnimationFrame
-- EnemyごとのDOM
-- EnemyごとのRaycaster
-- O(n²)全敵検索
-- 死亡ごとのMesh dispose
+# 34. Combo
 
-## Spatial Hash
+Hit数＝Combo増加数。
 
-Cell Size：4。
+同時10体Hit：
+
+```text
++10 COMBO
+```
+
+維持：
+
+```text
+3 sec
+```
+
+Hitなし3秒で0。
+
+---
+
+# 35. Attack Hit判定
+
+見た目のMeshとの厳密衝突は行わない。
+
+XZ平面上の範囲判定。
+
+通常：
+
+```text
+Radius + Arc
+```
+
+強攻撃：
+
+```text
+Radius
+```
+
+Skill：
+
+```text
+Large Radius
+```
+
+---
+
+# 36. 多重Hit防止
+
+Attackごとに：
 
 ```ts
-cellX = Math.floor(position.x / 4);
-cellZ = Math.floor(position.z / 4);
+attackInstanceId
+```
+
+を発行。
+
+同じAttack Instanceから同じEnemyへ1回だけHit。
+
+---
+
+# 37. Knockback
+
+敵に水平velocityを加える。
+
+```ts
+velocity += direction * knockbackPower;
+```
+
+減衰させる。
+
+視覚的に少しY方向へ上がる演出は任意。
+
+---
+
+# 38. Enemy Death
+
+HP 0：
+
+1. AI停止
+2. SpatialHash除外
+3. Kill Count++
+4. Comboは既存Hitで加算済み
+5. 仏力加算
+6. 0.8秒程度吹き飛ぶ/縮小
+7. 非表示
+8. Poolへ返却
+
+---
+
+# 39. Object Pool
+
+Enemyを毎回new/deleteしない。
+
+初期Pool：
+
+```text
+60～80
+```
+
+を確保。
+
+死亡後に再利用。
+
+---
+
+# 40. Spatial Hash Grid
+
+Cell size：
+
+```ts
+4
 ```
 
 用途：
 
-- Separation
-- 攻撃Hit検索
-- 近隣検索
+- Enemy Separation
+- Attack候補検索
 
----
+API例：
 
-# 19. Enemy描画
-
-MVPは簡易モデル + InstancedMesh。
-
-```text
-EnemyRenderer
- ├ body InstancedMesh
- ├ head InstancedMesh
- ├ helmet InstancedMesh
- └ weapon InstancedMesh
+```ts
+insert(id, x, z)
+update(id, x, z)
+remove(id)
+queryRadius(x, z, radius, output)
+clear()
 ```
 
-ロジックとRendererを分離。
+`queryRadius` は再利用Arrayを受け取る方式推奨。
 
 ---
 
-# 20. ステージ
+# 41. Enemy描画
 
-第一ステージ：荒廃した寺院。
+可能な範囲でInstancedMesh。
 
-- 80×80
-- 中央：寺院広場
-- 鳥居
-- 石灯籠
-- 壊れた柱
-- 岩
-- 境界
-
-境界：
+最低：
 
 ```text
-X -38～+38
-Z -38～+38
+body
+head
+helmet
+weapon
 ```
+
+ただし実装複雑度が高くPhaseを止める場合は、
+Phase 2ではGroup方式で開始し、
+Phase 4でInstancedMeshへ移行してよい。
+
+最終プロトタイプでは50体で30fps以上を満たすこと。
 
 ---
 
-# 21. カメラ
+# 42. Lighting
+
+最低：
+
+- HemisphereLight
+- DirectionalLight
+
+EnemyごとのLightは禁止。
+
+---
+
+# 43. Shadow
+
+プロトタイプでは任意。
+
+重い場合は無効。
+
+ShadowよりFPSを優先。
+
+---
+
+# 44. Camera
 
 三人称。
 
-```ts
-const CAMERA_OFFSET = { x: 0, y: 8, z: 12 };
-```
-
-Smooth Follow。
+Offset：
 
 ```ts
-camera.position.lerp(targetPosition, factor);
+new THREE.Vector3(0, 8, 12)
 ```
 
-MVPでは自由カメラを必須にしない。
+LookTarget：
+
+```text
+Player + Y 2
+```
+
+Smooth follow。
 
 ---
 
-# 22. COMBO
+# 45. HUD
 
-- 1 Hit = +1
-- 10体Hit = +10
-- 維持3秒
-- 3秒Hitなしで0
+最低表示：
+
+左上：
+
+```text
+HP
+仏力
+```
+
+右：
+
+```text
+COMBO
+```
+
+上または右上：
+
+```text
+撃破 32 / 100
+```
+
+左下：
+
+```text
+WASD 移動
+J 攻撃
+K 強攻撃
+L 仏技
+SPACE 回避
+```
+
+MiniMapはプロトタイプでは**任意**。
+
+完成条件には含めない。
 
 ---
 
-# 23. HUD
+# 46. 仏技表示
 
-左上：HP / 仏力。
-右上：ミニマップ。
-右中央：COMBO。
-右下：仏技。
-左下：操作説明。
+仏力100：
 
-ミニマップはCanvas 2D、更新10fps程度でよい。
+```text
+[L] 仏光陣 発動可能
+```
 
----
+100未満：
 
-# 24. エフェクト
-
-- 通常攻撃：金色Slash
-- 強攻撃：大型金色円弧
-- 仏技：光輪
-- Hit：Spark
-- Death：赤黒い煙
-
-外部Particleライブラリは初期導入しない。
-EffectPoolを使用。
+```text
+[L] 仏光陣
+```
 
 ---
 
-# 25. ヒットストップ
+# 47. 最低エフェクト
 
-強攻撃等で30～60ms。最大60ms。大量同時Hitでも時間を加算し続けない。
+必要：
+
+- 通常攻撃：金色Arc
+- 強攻撃：大きな金色Arc
+- Hit：小さいFlash
+- Skill：Ring
+- Enemy death：Fade / Smoke風
+
+高品質Particleは不要。
 
 ---
 
-# 26. ゲームループ
+# 48. エフェクト実装
+
+Three.js標準Geometry / Material。
+
+外部Particle library不要。
+
+再利用できるものはPool。
+
+---
+
+# 49. Hit Stop
+
+必須ではないが推奨。
+
+強攻撃で：
+
+```text
+30～50 ms
+```
+
+Skill：
+
+```text
+最大60 ms
+```
+
+大量Hit数に比例して増やさない。
+
+---
+
+# 50. Camera Shake
+
+推奨。
+
+通常Attack：
+
+なし～極小。
+
+強攻撃：
+
+小。
+
+Skill：
+
+中。
+
+酔うほど揺らさない。
+
+---
+
+# 51. Game Loop
+
+ゲーム全体で1本。
 
 ```ts
-requestAnimationFrame(loop);
+requestAnimationFrame(loop)
 ```
+
+Enemy個別loop禁止。
+
+固定Update推奨：
 
 ```ts
-const FIXED_DT = 1 / 60;
-const MAX_FRAME_DELTA = 0.1;
+FIXED_DT = 1 / 60
+MAX_FRAME_DELTA = 0.1
 ```
 
-順序：
+---
+
+# 52. Update順
 
 ```text
 Input
+↓
 Player
+↓
 Enemy AI
+↓
 Spatial Hash
+↓
 Combat
-Physics-lite
+↓
+Knockback
+↓
 Spawn
+↓
 Effects
+↓
 Camera
-UI
-Renderer
+↓
+HUD
+↓
+Render
 ```
 
 ---
 
-# 27. 物理/当たり判定
+# 53. EventBus
 
-本格物理エンジン不要。XZ平面中心。
+UI更新等に使用。
 
-- Player radius 0.8
-- Enemy radius 0.6
-
-吹き飛ばし：XZ velocity + 簡易Yアニメーション。
-
----
-
-# 28. データ駆動
-
-`src/config/balance.ts` にゲームバランス値を集約。
+最低イベント：
 
 ```ts
-export const PLAYER_CONFIG = {};
-export const ENEMY_CONFIG = {};
-export const ATTACK_CONFIG = {};
-export const SPAWN_CONFIG = {};
-export const STAGE_CONFIG = {};
+interface GameEvents {
+  'player:hpChanged': { hp: number; maxHp: number };
+  'player:powerChanged': { value: number; max: number };
+  'enemy:killed': { totalKills: number };
+  'combo:changed': { combo: number };
+  'game:stateChanged': { state: GameState };
+  'game:clear': { kills: number; maxCombo: number; time: number };
+  'game:over': { kills: number; maxCombo: number; time: number };
+}
 ```
+
+Enemy位置更新等はEvent化しない。
 
 ---
 
-# 29. 推奨構成
+# 54. ディレクトリ
 
 ```text
 src/
 ├─ main.ts
 ├─ game/
 │  ├─ Game.ts
-│  ├─ GameState.ts
-│  └─ GameLoop.ts
+│  ├─ GameLoop.ts
+│  └─ GameState.ts
 ├─ config/
 │  ├─ balance.ts
 │  └─ graphics.ts
 ├─ core/
 │  ├─ InputManager.ts
+│  ├─ EventBus.ts
 │  ├─ SpatialHashGrid.ts
-│  ├─ ObjectPool.ts
-│  └─ EventBus.ts
+│  └─ ObjectPool.ts
 ├─ player/
 │  ├─ Player.ts
 │  ├─ PlayerController.ts
@@ -549,7 +1193,6 @@ src/
 │  └─ EnemyRenderer.ts
 ├─ combat/
 │  ├─ CombatSystem.ts
-│  ├─ AttackDefinition.ts
 │  ├─ DamageSystem.ts
 │  └─ ComboSystem.ts
 ├─ world/
@@ -559,13 +1202,9 @@ src/
 ├─ camera/
 │  └─ ThirdPersonCamera.ts
 ├─ effects/
-│  ├─ EffectManager.ts
-│  ├─ SlashEffect.ts
-│  ├─ HitEffect.ts
-│  └─ BuddhaSkillEffect.ts
+│  └─ EffectManager.ts
 ├─ ui/
 │  ├─ HUD.ts
-│  ├─ MiniMap.ts
 │  ├─ TitleScreen.ts
 │  ├─ PauseScreen.ts
 │  └─ ResultScreen.ts
@@ -576,281 +1215,235 @@ src/
 
 ---
 
-# 30. InputManager
+# 55. Balance Config
 
-PressedとHeldを分離。押しっぱなしで毎frame攻撃しない。
+値を各Classへ直接埋め込まない。
+
+`src/config/balance.ts` に集約。
 
 ---
 
-# 31. EventBus
+# 56. Performance禁止事項
+
+禁止：
+
+- EnemyごとのrequestAnimationFrame
+- EnemyごとのDOM
+- EnemyごとのRaycaster
+- O(n²)Enemy全探索
+- GameLoop内大量new Vector3
+- Enemy死亡ごとのGeometry dispose
+- 毎frame大量DOM更新
+- EnemyごとのPointLight
+
+---
+
+# 57. Debug HUD
+
+F3。
+
+最低：
 
 ```text
-player:hpChanged
-player:powerChanged
-enemy:killed
-combo:changed
-game:clear
-game:over
+FPS
+Active Enemies
+Kills
+Draw Calls
+Triangles
 ```
 
-UIとゲームロジックを直接強結合させない。
+`renderer.info`を使用。
 
 ---
 
-# 32. 攻撃処理
+# 58. テスト対象
 
-```text
-PlayerCombat
- → CombatSystem
- → SpatialHashGrid.queryRadius()
- → 距離/角度判定
- → Damage
- → Knockback
-```
+Vitest。
 
-通常攻撃はforwardとのdot積で扇形判定。強攻撃・仏技はRadius判定。
+最低：
 
----
-
-# 33. localStorage
-
-保存候補：
-
-- 音量
-- 画質
-- 最高COMBO
-- 最高撃破数
-
-```text
-buddhaMusou.settings
-buddhaMusou.records
-```
-
----
-
-# 34. デバッグ
-
-F3：
-
-- FPS
-- Active Enemies
-- Pool Size
-- Draw Calls
-- Triangles
-- Memory
-
-`renderer.info`を利用。
-
-開発チート：
-
-```text
-F4 仏力MAX
-F5 敵50体追加
-F6 全敵撃破
-F7 無敵
-```
-
----
-
-# 35. テスト
-
-Vitest最低対象：
-
+- GameState
+- ObjectPool
 - SpatialHashGrid
 - ComboSystem
 - DamageSystem
-- ObjectPool
-- SpawnSystem
-- GameState
-- PlayerCombat cooldown
 - BuddhistPower
+- SpawnSystem
+- Attack多重Hit防止
 
-必須：
+---
+
+# 59. npm scripts
+
+最低：
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
+```
+
+構成に合わせて変更可。
+
+---
+
+# 60. Result
+
+クリア：
 
 ```text
-npm run typecheck
-npm test
-npm run build
+成仏完了
+
+撃破数 100
+最大COMBO 128
+戦闘時間 02:35
+
+[再挑戦]
+[タイトルへ]
+```
+
+Game Over：
+
+```text
+力尽きた……
+
+撃破数 42
+最大COMBO 61
+
+[再挑戦]
+[タイトルへ]
 ```
 
 ---
 
-# 36. 実装Phase
+# 61. Restart
 
-## Phase 0 基盤
+Restart時に必ずリセット：
 
-- Vite
-- TypeScript
-- Three.js
-- Vitest
-- strict
-- build/test/typecheck
-
-## Phase 1 プレイヤー
-
-- Scene
-- Renderer
-- Ground
-- 仏像簡易モデル
-- WASD
-- Stage境界
-- ThirdPersonCamera
-
-成功：仏像を操作できる。
-
-## Phase 2 敵AI
-
-- Enemy
-- Manager
-- Pool
-- Spawn
-- Renderer
-- chase
-- separation
-- 30体
-
-成功：落武者が群がる。
-
-## Phase 3 戦闘
-
-- J/K
-- Hit
-- Damage
-- Knockback
-- Dead
-- Kill count
-
-成功：多数の落武者を吹き飛ばせる。
-
-## Phase 4 大量敵
-
-- SpatialHashGrid
-- InstancedMesh
-- ObjectPool最適化
-- 100体
-
-成功：100体と戦闘可能。
-
-## Phase 5 仏技
-
-- 仏力
-- L
-- 仏光陣
-- 金色Effect
-
-## Phase 6 UI
-
-- HP
+- Player HP
+- Player position
+- Player state
 - 仏力
 - Combo
-- Kill
-- MiniMap
-- Controls
-- Skill indicator
-
-## Phase 7 ゲーム進行
-
-- Title
-- Start
-- Pause
-- Clear
-- Game Over
+- Kill count
+- Timers
+- Enemy active状態
+- EnemyPool
+- Effects
+- Attack slots
 - Result
-- Restart
+- Elapsed Time
 
-## Phase 8 演出
-
-- Slash
-- Hit
-- Death
-- Camera shake
-- Hit stop
-- Combo animation
-
-## Phase 9 最適化
-
-100→150体を検証。FPS/DrawCall/Memory計測。
-
-## Phase 10 GLTF対応
-
-`hero.glb` / `enemy.glb` があればロード可能にする。GLBなしでも動作。
+前Battleの状態を残さない。
 
 ---
 
-# 37. MVP完成条件
+# 62. プロトタイプPhase
 
-- タイトル
-- ゲーム開始
-- WASD
-- 大量落武者
-- 追跡AI
+プロトタイプは6 Phaseで完成させる。
+
+```text
+Phase 0 基盤
+Phase 1 Player
+Phase 2 Enemy
+Phase 3 Combat
+Phase 4 Skill / HUD / Game Flow
+Phase 5 Optimization / Final Verification
+```
+
+詳細は `docs/IMPLEMENTATION_PHASES.md`。
+
+---
+
+# 63. 最終Acceptance
+
+最終確認：
+
+```text
+TITLE
+↓
+START
+↓
+PLAYER MOVE
+↓
+50 ENEMIES
+↓
+J COMBO
+↓
+K MASS KNOCKBACK
+↓
+POWER 100
+↓
+L BUDDHA SKILL
+↓
+100 KILLS
+↓
+CLEAR
+↓
+RETRY
+```
+
+これが一連で動けばプロトタイプ完成。
+
+---
+
+# 64. 仕様凍結
+
+プロトタイプ完成までは以下を変更しない。
+
+- Stack
+- 操作キー
+- 基本Game Loop
+- 100 Kill Clear
+- 50 Enemy target
+- 仏像 vs 落武者
 - J/K/L/Space
-- Knockback
-- COMBO
-- HP
-- 仏力
-- 撃破数
-- 約100体戦闘
-- 300体CLEAR
-- HP0 GAME OVER
-- Restart
-- typecheck成功
-- test成功
-- build成功
+
+見た目、数値、色、名称微調整は可能。
 
 ---
 
-# 38. MVPで実装しない
+# 65. 完成後
 
-- オンライン
-- マルチプレイ
-- ランキングサーバー
-- ログイン
-- 課金
-- 装備
-- アイテム
-- レベルアップ
-- スキルツリー
-- ストーリー
-- 会話
-- 複数ステージ
-- 高度物理
-- 布シミュレーション
-- 高度IK
-- NavMesh
-- モバイル操作
-- ゲームパッド
-- セーブゲーム
+プロトタイプ完成後、別Issue / 別仕様として：
+
+- 正式3Dアセット
+- Animation
+- BGM / SE
+- UI polish
+- 100体以上
+- MiniMap
+- ボス
+- 敵種類
+- ステージ追加
+
+へ進む。
 
 ---
 
-# 39. Git/Codex
+# 66. 最重要原則
 
-各Phaseごとにコミット。日本語コミット。
+「機能を増やす」より、
 
-作業前：
+**最初から最後まで一度プレイできること**
+
+を優先する。
+
+プロトタイプの価値は機能数ではなく、
 
 ```text
-git status
-git diff
+遊べる
++
+爽快感がある
++
+拡張できる
++
+壊れていない
 ```
 
-破壊的操作禁止。共同開発者の変更を勝手に戻さない。
-
----
-
-# 40. 最重要原則
-
-```text
-大量の落武者
-      ↓
-仏像が錫杖を振る
-      ↓
-一度に多数Hit
-      ↓
-敵が大量に吹き飛ぶ
-      ↓
-COMBOが一気に増える
-```
-
-リアルさよりも**「大量の敵を吹き飛ばして気持ちいい」**ことを最優先する。
+ことである。

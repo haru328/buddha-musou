@@ -1,80 +1,70 @@
-# Codex 初回実装指示
+# CODEX_START.md
+# Codex 初回指示
 
-`GAME_SPEC.md` と `CONTRIBUTING.md` を最初に全文確認してください。
+以下の仕様を読んでください。
 
-## GOAL
+- `GAME_SPEC.md`
+- `docs/TECH_DESIGN.md`
+- `docs/IMPLEMENTATION_PHASES.md`
+- `docs/ACCEPTANCE_TESTS.md`
+- `docs/CODEX_RUNBOOK.md`
+- `CONTRIBUTING.md`
 
-`GAME_SPEC.md` に記載された「仏像無双（仮）」を実装する。今回は **Phase 0のみ** 実施する。Phase 1以降のゲーム本体はまだ実装しない。
+このプロジェクトのゴールは、
+**仏像無双（仮）の最低限遊べるブラウザプロトタイプをPhase 0～5で完成させること**です。
 
-## 開始前
+完成版Asset、BGM、SE、Boss等は今回のスコープ外です。
 
-必ず以下を確認する。
+まず今回は **Phase 0のみ** 実施してください。
+
+開始前：
 
 ```text
 git status
 git diff
+git branch --show-current
 ```
 
-既存の未コミット変更や共同開発者の変更を破棄しない。
+を確認してください。
 
-## Phase 0 TASK
+Phase 0:
 
-1. workspaceを確認する。
-2. 既存ファイルを確認する。
-3. Vite + TypeScript + Three.jsの基盤を作る。
-4. Vitestをセットアップする。
-5. TypeScript strictを有効にする。
-6. `npm run typecheck` を追加する。
-7. `npm test` を追加する。
-8. `npm run build` を成功させる。
-9. 必要なPhase 0ファイルのみ作る。
-10. READMEへ実際の起動方法を反映する。
-11. Phase 1以降は実装しない。
+- Vite
+- TypeScript
+- Three.js
+- Vitest
+- TypeScript strict
+- 基本ディレクトリ
+- Three.js Canvas起動
+- npm scripts
+- READMEの起動手順確認
 
-## CONSTRAINTS
+Phase 1以降のPlayer/Enemy/Combatはまだ実装しないでください。
 
-- React/Vueを使用しない。
-- 重量級物理エンジンを追加しない。
-- 不要な依存を追加しない。
-- Windows 11 / PowerShellで扱えること。
-- `git reset --hard` 等の破壊的操作禁止。
-- 無関係な変更をrevertしない。
-- コミットメッセージは日本語。
+終了時：
 
-## VERIFY
-
-```text
+```powershell
 npm run typecheck
 npm test
 npm run build
 ```
 
-すべて成功させる。
+を実行してください。
 
-## REPORT FORMAT
+コミットメッセージは日本語。
+
+報告：
 
 ```text
-STATE:
-PHASE:
+STATE: EXECUTED
+PHASE: 0
 
 実装内容:
--
-
 変更ファイル:
--
-
-テスト:
--
-
-Build:
--
-
-動作確認:
--
-
+typecheck:
+test:
+build:
+手動確認:
 既知の問題:
--
-
 次Phase:
--
 ```

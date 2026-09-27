@@ -1,21 +1,17 @@
-# CONTRIBUTING
+# CONTRIBUTING.md
+# GitHub共同開発ルール
 
-## GitHub共同開発方針
+## Branch
 
-`main` は常に動作確認済みの状態を維持します。原則として `main` へ直接pushせず、機能ブランチ + Pull Requestで統合します。
+`main` は動作確認済みのみ。
 
-## ブランチ
-
-- `feature/<内容>`：新機能
-- `fix/<内容>`：不具合修正
-- `docs/<内容>`：文書のみ
-
-例：
+作業：
 
 ```text
-feature/player-controller
-feature/enemy-ai
-fix/combo-reset
+feature/phase-1-player
+feature/phase-2-enemy
+feature/combat
+fix/knockback
 ```
 
 ## 作業開始
@@ -26,64 +22,49 @@ git pull
 git switch -c feature/作業名
 ```
 
-## コミット
+## Commit
 
-コミットメッセージは日本語を基本とします。
+日本語。
+
+例：
 
 ```text
-Phase 1: プレイヤー移動を実装
-落武者の追跡AIを追加
-強攻撃のノックバックを修正
+Phase 2: 落武者の追跡AIを実装
+強攻撃の吹き飛ばしを修正
 ```
-
-無関係な変更を1コミットへ混ぜないでください。
 
 ## Pull Request
 
-PRへ以下を記載します。
+PRへ最低：
 
 - 実装内容
-- 主な変更ファイル
-- 動作確認内容
-- `npm run typecheck` 結果
-- `npm test` 結果
-- `npm run build` 結果
-- 既知の問題
-- 見た目変更時のスクリーンショット
+- 変更ファイル
+- typecheck
+- test
+- build
+- 手動確認
+- 既知問題
 
-## Codex利用時
+## main直接push
 
-作業開始前に必ず：
+原則避ける。
+
+## Conflict
+
+相手の変更を勝手に捨てない。
+
+## Codex
+
+作業開始前：
 
 ```text
 git status
 git diff
+git branch --show-current
 ```
 
-を確認します。
+## Prototype中
 
-禁止：
+仕様外の機能追加を避ける。
 
-```text
-git reset --hard
-git clean -fd
-```
-
-共同開発者の未コミット変更や無関係な変更を破棄・revertしないこと。
-
-## Phase運用
-
-`GAME_SPEC.md` のPhase単位で作業します。
-
-1. 現状確認
-2. 実装
-3. typecheck
-4. test
-5. build
-6. 動作確認
-7. コミット
-8. Pull Request
-
-## 大容量アセット
-
-GLB、FBX、高解像度テクスチャ、WAV等が増えた場合はGit LFSを検討します。現時点のコンセプト画像3点は通常のGit管理で構いません。
+ゲームが最後まで動くことを優先。

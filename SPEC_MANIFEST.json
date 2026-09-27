@@ -1,0 +1,15 @@
+{
+  "name": "buddha-musou-prototype-spec",
+  "version": "1.0.0-prototype",
+  "goal": "Minimum playable browser prototype",
+  "documents": [
+    "GAME_SPEC.md",
+    "docs/TECH_DESIGN.md",
+    "docs/IMPLEMENTATION_PHASES.md",
+    "docs/ACCEPTANCE_TESTS.md",
+    "docs/CODEX_RUNBOOK.md",
+    "docs/ASSET_POLICY.md",
+    "CONTRIBUTING.md",
+    "CODEX_START.md"
+  ]
+}
