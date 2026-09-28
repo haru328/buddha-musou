@@ -1,0 +1,23 @@
+:root {
+  font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+  color: #f3eddf;
+  background: #171c1e;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+#game-root { position: relative; width: 100%; height: 100dvh; overflow: hidden; }
+canvas { display: block; }
+#ui-root { position: absolute; inset: 0; pointer-events: none; }
+.info-panel { margin: 32px; max-width: 410px; padding: 24px; background: #171c1ee6; border-left: 2px solid #d4a653; }
+.eyebrow { margin: 0 0 12px; color: #d4a653; font-size: 12px; letter-spacing: 0.12em; }
+h1 { margin: 0 0 20px; font-size: clamp(26px, 4vw, 36px); font-weight: 600; }
+h1 span { font-size: 0.55em; }
+#boot-status { font-size: 15px; line-height: 1.7; }
+#boot-status[role="alert"] { color: #ffb4a7; }
+.note { margin-bottom: 0; color: #b5bbb9; font-size: 13px; line-height: 1.9; }
+.viewport-note { position: absolute; bottom: 20px; right: 32px; color: #b5bbb9; font-size: 12px; }
+@media (max-width: 600px) {
+  .info-panel { margin: 16px; padding: 18px; }
+}

@@ -3,6 +3,49 @@
 このリポジトリは、ブラウザで動作する「仏像 vs 落武者」の無双風3Dアクションゲームを、
 **最低限遊べるプロトタイプまで完成させること**を目的とした仕様パッケージです。
 
+## 現在の実装：Phase 0
+
+Vite / TypeScript strict / Three.js / Vitestの開発基盤を実装済みです。
+起動すると金色の立方体が回転する3D描画確認画面を表示します。
+Player / Enemy / Combatは未実装です。
+
+## 開発環境と起動
+
+Node.js 22.12以上（推奨：Node.js 24 LTS）とnpmを用意してください。
+リポジトリのルートで実行します。
+
+```powershell
+npm install
+npm run dev
+```
+
+ターミナルに表示されたURL（通常は `http://127.0.0.1:5173`）をChrome / Edgeで開きます。
+「3D描画が起動しました」と金色の立方体が表示されれば起動成功です。
+サーバーは `Ctrl+C` で停止できます。
+
+```powershell
+npm run typecheck
+npm test
+npm run build
+npm run preview
+```
+
+ビルド結果は `dist/` に出力されます。`npm run preview` で本番ビルドをローカル確認できます。
+再現可能な依存インストールには、コミット済みの `package-lock.json` と `npm ci` を使用してください。
+WebGLが利用できない場合は、画面に起動失敗メッセージを表示します。
+
+### Phase 0の構成
+
+- `src/main.ts`：起動、エラー表示、開発時の再読み込み時の後片付け
+- `src/game/Game.ts`：Scene / Camera / Light / 確認用Meshとリサイズ処理
+- `src/game/GameLoop.ts`：単一の描画ループ、1/60秒の固定更新、最大delta 0.1秒
+- `src/config/graphics.ts`：描画・ループ設定（PixelRatio上限1.5）
+- `src/style.css`：Canvasと最小限の案内表示
+- `tests/GameLoop.test.ts`：多重起動防止、固定更新、長時間停止、停止・再開のテスト
+
+非表示タブではループを停止し、表示時に時刻をリセットして再開します。
+他の基本ディレクトリは、各Phaseの実装用に確保しています。
+
 ## 最初に読む順番
 
 1. `GAME_SPEC.md`
