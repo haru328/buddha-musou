@@ -1,30 +1,32 @@
 export const PLAYER_CONFIG = {
-  maxHp: 1000, moveSpeed: 8, rotationSpeed: 12,
+  maxHp: 1000, moveSpeed: 9, rotationSpeed: 20,
   dodgeSpeed: 16, dodgeDuration: 0.3, dodgeInvincibleDuration: 0.25,
   dodgeCooldown: 0.5, hitInvincibleDuration: 0.35, buddhistPowerMax: 100,
 } as const;
 
 export const NORMAL_ATTACKS = [
-  { damage: 40, radius: 3, arcDeg: 110, knockback: 3, duration: 0.45 },
-  { damage: 55, radius: 3.5, arcDeg: 130, knockback: 4, duration: 0.48 },
-  { damage: 80, radius: 4.5, arcDeg: 170, knockback: 8, duration: 0.6 },
+  { damage: 45, radius: 5, arcDeg: 160, knockback: 3.5, launch: 2.8, lunge: 1.1, duration: 0.28 },
+  { damage: 60, radius: 5.8, arcDeg: 200, knockback: 5, launch: 4, lunge: 1.2, duration: 0.30 },
+  { damage: 95, radius: 7, arcDeg: 250, knockback: 13, launch: 9, lunge: 1.5, duration: 0.38 },
 ] as const;
-export const STRONG_ATTACK = { damage: 120, radius: 6, knockback: 12, cooldown: 1.2, duration: 0.65 } as const;
-export const BUDDHA_SKILL = { damage: 300, radius: 12, knockback: 20, powerCost: 100, duration: 1.05 } as const;
+export const STRONG_ATTACK = { damage: 145, radius: 8, arcDeg: 360, knockback: 19, launch: 12, lunge: 0.55, cooldown: 0.8, duration: 0.48 } as const;
+export const BUDDHA_SKILL = { damage: 320, radius: 16, arcDeg: 360, knockback: 28, launch: 17, lunge: 0, powerCost: 100, duration: 0.85 } as const;
 export const ENEMY_CONFIG = {
-  maxHp: 100, moveSpeedMin: 2.2, moveSpeedMax: 3.2,
+  maxHp: 100, moveSpeedMin: 3.8, moveSpeedMax: 5.2,
   attackDamage: 15, attackDistance: 1.8, attackIntervalMin: 1.5, attackIntervalMax: 2.5,
-  separationRadius: 1.2, separationStrength: 2.8, windup: 0.35,
-  maxAttackers: 6, knockbackDuration: 0.45, knockbackDrag: 4, deathDuration: 0.8,
+  separationRadius: 0.95, separationStrength: 2.3, windup: 0.35,
+  maxAttackers: 6, knockbackDuration: 0.4, knockbackDrag: 1.9, deathDuration: 1.55,
+  gravity: 25, groundDrag: 9,
 } as const;
 export const SPAWN_CONFIG = {
-  initialEnemies: 20, targetEnemies: 50, maxEnemies: 60,
-  minSpawnDistance: 14, maxSpawnDistance: 28, spawnBatch: 5, interval: 1,
+  initialEnemies: 50, targetEnemies: 70, maxEnemies: 96,
+  minSpawnDistance: 10, maxSpawnDistance: 18, spawnBatch: 10, interval: 0.55,
 } as const;
 export const COMBAT_CONFIG = {
-  inputBuffer: 0.25, chainWindow: 0.55, hitStart: 0.22, hitEnd: 0.6,
-  comboTimeout: 3, hitPower: 2, killPower: 3, attackMoveFactor: 0.25,
+  inputBuffer: 0.25, chainWindow: 0.7, hitStart: 0.12, hitEnd: 0.65,
+  comboTimeout: 3, hitPower: 2, killPower: 3, attackMoveFactor: 0.65,
+  targetAssistRadius: 9, targetAssistArc: 200, strongCancelProgress: 0.42,
 } as const;
 export const STAGE_BOUND = 33;
-export const CLEAR_KILLS = 100;
+export const CLEAR_KILLS = 1000;
 export const SPATIAL_CELL_SIZE = 4;

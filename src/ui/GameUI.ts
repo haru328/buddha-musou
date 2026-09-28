@@ -6,6 +6,7 @@ interface Actions {
   pause: () => void;
   resume: () => void;
   title: () => void;
+  toggleSound: () => void;
 }
 
 export interface PerformanceStats {
@@ -15,7 +16,7 @@ export interface PerformanceStats {
   geometries: number;
 }
 
-const controls = `<span><kbd>W A S D</kbd><kbd>↑ ↓ ← →</kbd> 移動</span><span><kbd>J</kbd> 通常攻撃</span><span><kbd>K</kbd> 強攻撃</span><span><kbd>L</kbd> 仏技</span><span><kbd>Space</kbd> 回避</span>`;
+const controls = `<span><kbd>W A S D</kbd><kbd>↑ ↓ ← →</kbd> 移動</span><span><kbd>J</kbd> 長押し連撃</span><span><kbd>K</kbd> 強攻撃</span><span><kbd>L</kbd> 仏技</span><span><kbd>Space</kbd> 回避</span>`;
 
 function clock(seconds: number): string {
   return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
@@ -27,38 +28,46 @@ export class GameUI {
   private lastState = '';
   private debugVisible = false;
   private oldCombo = 0;
+  private feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+  private feedbackAnimation: Animation | undefined;
+  private flashAnimation: Animation | undefined;
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   constructor(private readonly root: HTMLElement, actions: Actions) {
     root.innerHTML = `
       <div class="screen-vignette" aria-hidden="true"></div>
       <section id="title-screen" class="screen title-screen" aria-labelledby="game-title">
-        <header class="brand"><span class="brand-mark" aria-hidden="true">仏</span><span>BUDDHA MUSOU<small>ブラウザ・アクションプロトタイプ</small></span></header>
+        <header class="brand"><span class="brand-mark" aria-hidden="true">仏</span><span>BUDDHA MUSOU<small>一騎当千・仏像アクション</small></span></header>
         <div class="title-copy">
-          <p class="eyebrow">一振りで、百の魂を解き放て。</p>
-          <h1 id="game-title">仏像<span>無双</span><small>（仮）</small></h1>
+          <p class="eyebrow">一振りで、千の魂を解き放て。</p>
+          <h1 id="game-title">仏像<span>無双</span><small>BUDDHA MUSOU / 仮題</small></h1>
           <div class="gold-rule"></div>
-          <p class="title-description">荒廃した寺院に、落武者たちが集う。<br>錫杖を振るい、仏の光で百体を鎮めよ。</p>
-          <button id="start-button" class="primary-button" type="button">戦いを始める <span>Enter →</span></button>
-          <p class="title-tip">通常攻撃で仏力を溜め、<kbd>L</kbd> で「仏光陣」。</p>
+          <p class="title-description">押し寄せる落武者を、錫杖の一撃で薙ぎ払え。<br>千の魂を鎮める、仏の戦いが始まる。</p>
+          <button id="start-button" class="primary-button" type="button">出 陣 <span>ENTER →</span></button>
+          <p class="title-tip"><kbd>J</kbd> 連撃で溜める。<kbd>K</kbd> 一掃する。<kbd>L</kbd> 解き放つ。</p>
         </div>
         <footer class="title-footer"><div class="controls">${controls}</div><span class="prototype-label">PROTOTYPE · PC / KEYBOARD</span></footer>
-        <p class="stage-name">壱<span>荒廃した寺院</span></p>
+        <p class="stage-name"><b>第一陣</b><span>荒廃した寺院</span><small>千体撃破</small></p>
       </section>
 
       <section id="hud" class="hud" aria-label="戦闘状況" hidden>
         <div class="vitals">
-          <div class="vitals-title"><span class="small-seal">仏</span><span>仏像戦士<small>守りを崩さず、群れを薙ぎ払え</small></span></div>
+          <div class="hero-crest" aria-hidden="true"><svg viewBox="0 0 100 110"><circle cx="50" cy="38" r="30"/><circle cx="50" cy="38" r="24"/><path d="M29 101 25 87 31 70 40 65 41 57 36 49 34 34 40 23 47 20 47 12 53 12 55 21 62 27 65 36 63 50 58 57 59 64 72 72 79 91 74 101Z"/><path d="M38 74 50 87 63 74M42 42 47 43M54 43 59 42M48 52 54 52"/><path d="M13 105 13 33M9 22 9 32 17 32 17 22 9 22Z"/></svg><span>仏</span></div>
+          <div class="vitals-title"><span>仏像戦士<small>不動の一撃 · 千魂を鎮めよ</small></span></div>
           <div class="meter-label"><span>体力</span><span id="hp-value"></span></div>
           <div id="hp-meter" class="meter hp-meter" role="progressbar" aria-label="体力" aria-valuemin="0" aria-valuemax="${PLAYER_CONFIG.maxHp}"><div id="hp-fill"></div></div>
           <div class="meter-label power-label"><span>仏力</span><span id="power-value">0 / 100</span></div>
           <div id="power-meter" class="meter power-meter" role="progressbar" aria-label="仏力" aria-valuemin="0" aria-valuemax="${PLAYER_CONFIG.buddhistPowerMax}"><div id="power-fill"></div></div>
           <p id="skill-label" class="skill-label"><kbd>L</kbd> 仏光陣</p>
         </div>
-        <div class="objective"><span>魂を鎮めよ</span><strong><b id="kills-value">0</b><i> / ${CLEAR_KILLS}</i></strong><small>撃破</small></div>
-        <div id="combo-panel" class="combo-panel"><strong id="combo-value">0</strong><span>COMBO</span><div class="combo-track"><div id="combo-fill"></div></div></div>
+        <div class="objective"><span>撃破目標 <b>${CLEAR_KILLS}</b></span><strong><b id="kills-value">0</b><i> K.O.</i></strong><small>荒廃した寺院</small></div>
+        <div id="combo-panel" class="combo-panel"><strong id="combo-value">0</strong><span>連撃 <b>COMBO</b></span><div class="combo-track"><div id="combo-fill"></div></div></div>
         <button id="pause-button" class="pause-button" type="button" aria-label="一時停止">Ⅱ <span>Esc</span></button>
+        <button id="sound-button" class="sound-button" type="button" aria-label="効果音" aria-pressed="true" title="効果音の切り替え (M)">音 ON</button>
         <div class="battle-footer"><div class="controls">${controls}</div><span id="time-value">00:00</span></div>
         <div id="hurt-overlay" class="hurt-overlay" aria-hidden="true"></div>
+        <div id="impact-flash" class="impact-flash" aria-hidden="true"></div>
+        <div id="combat-feedback" class="combat-feedback" role="status" aria-live="polite" aria-atomic="true"><small id="feedback-kicker"></small><strong id="feedback-title"></strong><span id="feedback-hits"></span></div>
       </section>
 
       <section id="pause-screen" class="screen modal-screen" aria-labelledby="pause-title" hidden>
@@ -82,6 +91,7 @@ export class GameUI {
     bind('start-button', actions.start);
     bind('retry-button', actions.start);
     bind('pause-button', actions.pause);
+    bind('sound-button', actions.toggleSound);
     bind('resume-button', actions.resume);
     bind('pause-title-button', actions.title);
     bind('result-title-button', actions.title);
@@ -92,9 +102,52 @@ export class GameUI {
     this.el('debug-panel').hidden = !this.debugVisible;
   }
 
+  setSoundEnabled(enabled: boolean): void {
+    this.text('sound-button', enabled ? '音 ON' : '音 OFF');
+    this.el('sound-button').setAttribute('aria-pressed', String(enabled));
+  }
+
+  /** Called only for a confirmed damage batch, so the display rewards actual hits. */
+  combatFeedback(kind: 'normal' | 'strong' | 'skill', hits: number, restart = true): void {
+    if (hits <= 0 || this.root.dataset.state !== 'playing') return;
+    this.text('feedback-hits', `${hits} HIT${hits === 1 ? '' : 'S'}`);
+    // Later targets belong to the same swing: update the total without replaying its impact.
+    if (!restart) return;
+    if (this.feedbackTimer !== undefined) clearTimeout(this.feedbackTimer);
+    this.feedbackAnimation?.cancel();
+    this.flashAnimation?.cancel();
+    const banner = this.el('combat-feedback');
+    banner.dataset.kind = kind;
+    banner.classList.add('visible');
+    this.text('feedback-kicker', kind === 'skill' ? '仏力解放' : kind === 'strong' ? '錫杖・強撃' : '錫杖・連撃');
+    this.text('feedback-title', kind === 'skill' ? '仏光陣' : kind === 'strong' ? '一 掃' : '連 撃');
+    if (!this.reducedMotion.matches) {
+      this.feedbackAnimation = banner.animate([
+        { opacity: 0, transform: `translateX(${kind === 'normal' ? 18 : -40}px) scale(${kind === 'skill' ? 1.16 : 1.08})` },
+        { opacity: 1, transform: 'translateX(0) scale(1)' },
+      ], { duration: kind === 'skill' ? 220 : 130, easing: 'cubic-bezier(.16,1,.3,1)' });
+      if (kind !== 'normal') this.flashAnimation = this.el('impact-flash').animate([
+        { opacity: kind === 'skill' ? 0.65 : 0.3 }, { opacity: 0 },
+      ], { duration: kind === 'skill' ? 340 : 180, easing: 'ease-out' });
+    }
+    this.feedbackTimer = setTimeout(() => {
+      banner.classList.remove('visible');
+      this.feedbackTimer = undefined;
+    }, kind === 'skill' ? 1350 : kind === 'strong' ? 720 : 450);
+  }
+
+  private resetFeedback(): void {
+    if (this.feedbackTimer !== undefined) clearTimeout(this.feedbackTimer);
+    this.feedbackTimer = undefined;
+    this.feedbackAnimation?.cancel();
+    this.flashAnimation?.cancel();
+    this.el('combat-feedback').classList.remove('visible');
+  }
+
   update(session: GameSession, stats: PerformanceStats): void {
     const { player, state } = session;
     if (this.lastState !== state) {
+      this.resetFeedback();
       this.lastState = state;
       this.el('title-screen').hidden = state !== 'title';
       this.el('hud').hidden = state !== 'playing' && state !== 'paused';
@@ -121,7 +174,7 @@ export class GameUI {
     this.el('combo-panel').classList.toggle('large', session.combo >= 20);
     this.el('combo-fill').style.transform = `scaleX(${session.comboRemaining / COMBAT_CONFIG.comboTimeout})`;
     if (session.combo !== this.oldCombo) {
-      this.el('combo-value').animate([{ transform: 'scale(1.16)' }, { transform: 'scale(1)' }], { duration: 160 });
+      if (!this.reducedMotion.matches) this.el('combo-value').animate([{ transform: 'scale(1.2) rotate(-3deg)' }, { transform: 'scale(1)' }], { duration: 180 });
       this.oldCombo = session.combo;
     }
     this.el('hurt-overlay').classList.toggle('visible', player.hurt && state === 'playing');
@@ -130,7 +183,7 @@ export class GameUI {
       const clear = session.result === 'clear';
       this.text('result-eyebrow', clear ? 'ALL SOULS RELEASED' : 'BATTLE ENDED');
       this.text('result-title', clear ? '成仏完了' : '力尽きた……');
-      this.text('result-description', clear ? '百の魂に、安らぎを。' : '回避で間合いを取り、強攻撃で群れを崩そう。');
+      this.text('result-description', clear ? '千の魂に、安らぎを。' : '回避で間合いを取り、強攻撃で群れを崩そう。');
       this.text('result-kills', String(session.kills));
       this.text('result-combo', String(session.maxCombo));
       this.text('result-time', clock(session.elapsed));
@@ -141,7 +194,7 @@ export class GameUI {
     }
   }
 
-  dispose(): void { this.abort.abort(); this.root.replaceChildren(); }
+  dispose(): void { this.resetFeedback(); this.abort.abort(); this.root.replaceChildren(); }
   private el(id: string): HTMLElement { return this.elements.get(id)!; }
   private text(id: string, value: string): void {
     const element = this.el(id);

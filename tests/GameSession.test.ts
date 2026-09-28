@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GameSession } from '../src/game/GameSession';
 import type { EnemyData, SessionInput } from '../src/game/GameSession';
-import { ENEMY_CONFIG, PLAYER_CONFIG, SPAWN_CONFIG, STAGE_BOUND } from '../src/config/balance';
+import { CLEAR_KILLS, ENEMY_CONFIG, PLAYER_CONFIG, SPAWN_CONFIG, STAGE_BOUND, NORMAL_ATTACKS, STRONG_ATTACK } from '../src/config/balance';
 
 const idle: SessionInput = { moveX: 0, moveZ: 0, attack: false, strong: false, skill: false, dodge: false };
 const tick = (game: GameSession, input: Partial<SessionInput> = {}) => game.update(1 / 60, { ...idle, ...input });
@@ -21,7 +21,7 @@ function parkEnemies(game: GameSession): void {
   }
 }
 function place(enemy: EnemyData, x: number, z: number): void {
-  Object.assign(enemy, { x, z, speed: 0, cooldown: 100, vx: 0, vz: 0, state: 'chase', hp: 100 });
+  Object.assign(enemy, { x, z, speed: 0, cooldown: 100, vx: 0, vz: 0, y: 0, vy: 0, spin: 0, angularVelocity: 0, state: 'chase', hp: 100 });
 }
 
 describe('game flow and movement', () => {
@@ -40,8 +40,8 @@ describe('game flow and movement', () => {
   it('normalizes diagonal movement and clamps the arena boundary', () => {
     const straight = makeGame(); const diagonal = makeGame();
     run(straight, 1, { moveX: 1 }); run(diagonal, 1, { moveX: 1, moveZ: -1 });
-    expect(straight.player.x).toBeCloseTo(8);
-    expect(Math.hypot(diagonal.player.x, diagonal.player.z)).toBeCloseTo(8);
+    expect(straight.player.x).toBeCloseTo(PLAYER_CONFIG.moveSpeed);
+    expect(Math.hypot(diagonal.player.x, diagonal.player.z)).toBeCloseTo(PLAYER_CONFIG.moveSpeed);
     run(straight, 10, { moveX: 1 });
     expect(straight.player.x).toBe(STAGE_BOUND);
   });
@@ -56,27 +56,27 @@ describe('game flow and movement', () => {
 });
 
 describe('spawning and AI', () => {
-  it('starts twenty at safe ring distances and ramps to fifty without exceeding the pool', () => {
+  it('starts a dense crowd at safe distances and rapidly fills its bounded population', () => {
     const game = makeGame();
-    expect(game.activeEnemies).toBe(20);
+    expect(game.activeEnemies).toBe(SPAWN_CONFIG.initialEnemies);
     for (const enemy of game.enemies.filter(e => e.state !== 'inactive')) {
-      expect(Math.hypot(enemy.x, enemy.z)).toBeGreaterThanOrEqual(14);
-      expect(Math.hypot(enemy.x, enemy.z)).toBeLessThanOrEqual(28);
+      expect(Math.hypot(enemy.x, enemy.z)).toBeGreaterThanOrEqual(SPAWN_CONFIG.minSpawnDistance);
+      expect(Math.hypot(enemy.x, enemy.z)).toBeLessThanOrEqual(SPAWN_CONFIG.maxSpawnDistance);
     }
-    run(game, 6);
-    expect(game.activeEnemies).toBe(50);
+    run(game, 1.1);
+    expect(game.activeEnemies).toBe(SPAWN_CONFIG.targetEnemies);
     run(game, 10);
-    expect(game.activeEnemies).toBe(50);
+    expect(game.activeEnemies).toBe(SPAWN_CONFIG.targetEnemies);
     expect(game.enemies).toHaveLength(SPAWN_CONFIG.maxEnemies);
   });
   it('spawns inside the arena and safe ring even when the player is in a corner', () => {
     const game = makeGame();
     game.player.x = STAGE_BOUND; game.player.z = STAGE_BOUND;
-    run(game, 1);
-    for (const enemy of game.enemies.slice(20, 25)) {
+    run(game, SPAWN_CONFIG.interval);
+    for (const enemy of game.enemies.slice(SPAWN_CONFIG.initialEnemies, SPAWN_CONFIG.initialEnemies + SPAWN_CONFIG.spawnBatch)) {
       expect(Math.abs(enemy.x)).toBeLessThanOrEqual(STAGE_BOUND);
       expect(Math.abs(enemy.z)).toBeLessThanOrEqual(STAGE_BOUND);
-      expect(Math.hypot(enemy.x - game.player.x, enemy.z - game.player.z)).toBeGreaterThanOrEqual(14 - 1e-6);
+      expect(Math.hypot(enemy.x - game.player.x, enemy.z - game.player.z)).toBeGreaterThanOrEqual(SPAWN_CONFIG.minSpawnDistance - 1e-6);
     }
   });
   it('separates initially coincident enemies and pursues the player', () => {
@@ -108,32 +108,78 @@ describe('spawning and AI', () => {
 });
 
 describe('player combat', () => {
+  it('connects a sweeping attack with a broad formation immediately', () => {
+    const game = makeGame(); parkEnemies(game);
+    place(game.enemies[0], 0, -2);
+    for (let index = 1; index <= 8; index++) {
+      const angle = (-65 + (index - 1) * 130 / 7) * Math.PI / 180;
+      place(game.enemies[index], Math.sin(angle) * 4.2, -Math.cos(angle) * 4.2);
+    }
+    tick(game, { attack: true }); run(game, 0.1);
+    expect(game.combo).toBe(9);
+    expect(game.enemies.slice(0, 9).every(enemy => enemy.hp === 55)).toBe(true);
+    expect(game.events.filter(event => event.kind === 'hit').every(event => event.attackKind === 'normal' && event.attackStep === 0)).toBe(true);
+  });
+  it('faces a reachable forward target and lunges into staff range', () => {
+    const game = makeGame(); parkEnemies(game);
+    place(game.enemies[0], 4, -4);
+    tick(game, { attack: true }); run(game, 0.3);
+    expect(game.player.rotation).toBeCloseTo(Math.atan2(4, -4));
+    expect(Math.hypot(game.player.x, game.player.z)).toBeCloseTo(NORMAL_ATTACKS[0].lunge);
+    expect(game.enemies[0].hp).toBe(55);
+  });
+  it('allows heavy and skill attacks during a held normal chain', () => {
+    const game = makeGame(); parkEnemies(game);
+    run(game, 0.1, { attack: true }); tick(game, { attack: true, strong: true });
+    run(game, 0.1, { attack: true });
+    expect(game.player.attackKind).toBe('strong');
+    game.player.power = 100;
+    tick(game, { attack: true, skill: true });
+    expect(game.player.attackKind).toBe('skill');
+    expect(game.player.power).toBe(0);
+  });
+  it('launches a heavy-hit crowd into the air with outward velocity and tumbling', () => {
+    const game = makeGame(); parkEnemies(game);
+    place(game.enemies[0], -3, 0); place(game.enemies[1], 3, 0);
+    tick(game, { strong: true }); run(game, 0.4);
+    const left = game.enemies[0]; const right = game.enemies[1];
+    expect(left.state).toBe('dead'); expect(right.state).toBe('dead');
+    expect(left.y).toBeGreaterThan(2); expect(right.y).toBeGreaterThan(2);
+    expect(left.x).toBeLessThan(-6); expect(right.x).toBeGreaterThan(6);
+    expect(Math.abs(left.spin)).toBeGreaterThan(2);
+    game.pause(); const y = left.y; run(game, 0.5); expect(left.y).toBe(y);
+    game.resume(); run(game, 1.2);
+    expect(left.y).toBe(0); expect(right.y).toBe(0);
+    expect(game.enemies.every(enemy => Number.isFinite(enemy.y) && enemy.y >= 0)).toBe(true);
+  });
   it('hits each forward enemy once, excludes rear enemies, and adds hit power', () => {
     const game = makeGame(); parkEnemies(game);
     place(game.enemies[0], -0.5, -2); place(game.enemies[1], 0.5, -2); place(game.enemies[2], 0, 2);
     tick(game, { attack: true }); run(game, 0.4);
-    expect(game.enemies[0].hp).toBe(60); expect(game.enemies[1].hp).toBe(60);
+    expect(game.enemies[0].hp).toBe(100 - NORMAL_ATTACKS[0].damage); expect(game.enemies[1].hp).toBe(100 - NORMAL_ATTACKS[0].damage);
     expect(game.enemies[2].hp).toBe(100);
     expect(game.combo).toBe(2); expect(game.player.power).toBe(4);
     expect(game.events.filter(event => event.kind === 'slash')).toHaveLength(1);
   });
   it('buffers three attack stages, then returns to stage one', () => {
     const game = makeGame(); parkEnemies(game);
-    tick(game, { attack: true }); run(game, 0.25); tick(game, { attack: true }); run(game, 0.2);
-    expect(game.player.attackKind).toBe('normal'); expect(game.player.attackStep).toBe(1);
-    run(game, 0.25); tick(game, { attack: true }); run(game, 0.25);
-    expect(game.player.attackStep).toBe(2);
-    run(game, 0.35); tick(game, { attack: true }); run(game, 0.25);
-    expect(game.player.attackStep).toBe(0); expect(game.attackInstanceId).toBe(4);
+    tick(game, { attack: true });
+    for (let attack = 2; attack <= 4; attack++) {
+      for (let frame = 0; frame < 30 && game.attackInstanceId < attack; frame++) tick(game, { attack: true });
+      expect(game.player.attackKind).toBe('normal');
+      expect(game.player.attackStep).toBe((attack - 1) % 3);
+      expect(game.attackInstanceId).toBe(attack);
+    }
+    expect(game.elapsed).toBeLessThan(1);
   });
   it('strong attacks kill a ring, reward hit plus kill, and honor cooldown', () => {
     const game = makeGame(); parkEnemies(game);
     for (let i = 0; i < 10; i++) place(game.enemies[i], Math.sin(i) * 4, Math.cos(i) * 4);
-    tick(game, { strong: true }); run(game, 0.7);
+    tick(game, { strong: true }); run(game, STRONG_ATTACK.duration);
     expect(game.kills).toBe(10); expect(game.combo).toBe(10); expect(game.player.power).toBe(50);
     expect(game.enemies.slice(0, 10).every(enemy => enemy.state === 'dead')).toBe(true);
     tick(game, { strong: true }); expect(game.player.attackKind).toBeNull();
-    run(game, 0.5); tick(game, { strong: true }); expect(game.player.attackKind).toBe('strong');
+    run(game, STRONG_ATTACK.cooldown); tick(game, { strong: true }); expect(game.player.attackKind).toBe('strong');
   });
   it('requires a full meter for skill, hits a broad ring and leaves power at zero', () => {
     const game = makeGame(); parkEnemies(game);
@@ -160,13 +206,14 @@ describe('result and restart', () => {
   it('supports an unmodified full battle to clear, retry, defeat and title', () => {
     const game = makeGame();
     // Repeated button presses only: no HP, spawn, kill or cooldown overrides.
-    for (let frame = 0; frame < 180 * 60 && game.state === 'playing'; frame++) {
+    for (let frame = 0; frame < 240 * 60 && game.state === 'playing'; frame++) {
       const press = frame % 12 === 0;
       tick(game, { strong: press, skill: press });
       game.events.length = 0;
     }
     expect(game.result).toBe('clear');
-    expect(game.kills).toBeGreaterThanOrEqual(100);
+    expect(game.kills).toBeGreaterThanOrEqual(CLEAR_KILLS);
+    expect(game.elapsed).toBeGreaterThan(30);
     expect(game.maxCombo).toBeGreaterThan(5);
     expect(game.player.hp).toBeGreaterThan(0);
     game.start();
@@ -179,11 +226,11 @@ describe('result and restart', () => {
     game.returnToTitle();
     expect(game.state).toBe('title');
   });
-  it('ends at the hundredth kill and freezes the result', () => {
+  it('ends at the configured final kill and freezes the result', () => {
     const game = makeGame(); parkEnemies(game);
-    game.kills = 99; place(game.enemies[0], 0, -2);
+    game.kills = CLEAR_KILLS - 1; place(game.enemies[0], 0, -2);
     tick(game, { strong: true }); run(game, 0.5);
-    expect(game.state).toBe('result'); expect(game.result).toBe('clear'); expect(game.kills).toBe(100);
+    expect(game.state).toBe('result'); expect(game.result).toBe('clear'); expect(game.kills).toBe(CLEAR_KILLS);
     const time = game.elapsed; run(game, 1); expect(game.elapsed).toBe(time);
   });
   it('ends at zero HP and fully resets battle state, objects and timers on retry', () => {
@@ -198,7 +245,8 @@ describe('result and restart', () => {
     expect(game.player.hp).toBe(1000); expect(game.player.power).toBe(0);
     expect(game.player.x).toBe(0); expect(game.player.z).toBe(0); expect(game.player.dead).toBe(false);
     expect(game.kills).toBe(0); expect(game.elapsed).toBe(0); expect(game.maxCombo).toBe(0);
-    expect(game.attackSlots).toBe(0); expect(game.events).toHaveLength(0); expect(game.activeEnemies).toBe(20);
+    expect(game.attackSlots).toBe(0); expect(game.events).toHaveLength(0); expect(game.activeEnemies).toBe(SPAWN_CONFIG.initialEnemies);
+    expect(game.enemies.every(enemy => enemy.y === 0 && enemy.vy === 0 && enemy.spin === 0)).toBe(true);
     expect(game.enemies.every((enemy, index) => enemy === references[index])).toBe(true);
     game.returnToTitle(); expect(game.state).toBe('title'); expect(game.activeEnemies).toBe(0);
   });

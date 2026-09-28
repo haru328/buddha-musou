@@ -16,8 +16,9 @@ export interface EnemyData {
   id: number; x: number; z: number; rotation: number; hp: number;
   state: 'inactive' | 'chase' | 'windup' | 'knockback' | 'dead';
   timer: number; flash: number; speed: number; cooldown: number; vx: number; vz: number;
+  y: number; vy: number; spin: number; angularVelocity: number;
 }
-export interface GameEvent { kind: 'slash' | 'strong' | 'skill' | 'hit' | 'death' | 'playerHit'; x: number; z: number; rotation?: number }
+export interface GameEvent { kind: 'slash' | 'strong' | 'skill' | 'hit' | 'death' | 'playerHit'; x: number; z: number; rotation?: number; attackKind?: AttackKind; attackStep?: number }
 
 const clampPosition = (value: number): number => Math.max(-STAGE_BOUND, Math.min(STAGE_BOUND, value));
 const initialPlayer = (): PlayerData => ({
@@ -26,7 +27,7 @@ const initialPlayer = (): PlayerData => ({
   attackProgress: 0, attackKind: null, attackStep: 0,
 });
 
-/** Browser-independent battle simulation. Input actions are presses, not held keys. */
+/** Browser-independent battle simulation. Normal attack also supports held input. */
 export class GameSession {
   state: GameState = 'title';
   result: GameResult = null;
@@ -54,11 +55,14 @@ export class GameSession {
   private attackBuffer = 0;
   private chainTimer = 0;
   private nextStep = 0;
+  private strongBuffer = 0;
+  private skillBuffer = 0;
+  private inputHeading: number | null = null;
 
   constructor(private readonly random: () => number = Math.random) {
     this.pool = new ObjectPool(SPAWN_CONFIG.maxEnemies, (id) => ({
       id, x: 0, z: 0, rotation: 0, hp: 0, state: 'inactive', timer: 0,
-      flash: 0, speed: 0, cooldown: 0, vx: 0, vz: 0,
+      flash: 0, speed: 0, cooldown: 0, vx: 0, vz: 0, y: 0, vy: 0, spin: 0, angularVelocity: 0,
     }));
     this.enemies = this.pool.items;
   }
@@ -102,10 +106,14 @@ export class GameSession {
     this.attackBuffer = 0;
     this.chainTimer = 0;
     this.nextStep = 0;
+    this.strongBuffer = 0;
+    this.skillBuffer = 0;
+    this.inputHeading = null;
     this.attackEventSent = false;
     for (const enemy of this.enemies) {
       enemy.state = 'inactive'; enemy.hp = 0; enemy.timer = 0; enemy.flash = 0;
       enemy.vx = 0; enemy.vz = 0; enemy.cooldown = 0;
+      enemy.y = 0; enemy.vy = 0; enemy.spin = 0; enemy.angularVelocity = 0;
     }
   }
 
@@ -115,8 +123,8 @@ export class GameSession {
     dt = Math.min(dt, 0.1);
     this.elapsed += dt;
     this.comboSystem.update(dt);
-    this.updatePlayer(dt, input);
     this.syncGrid();
+    this.updatePlayer(dt, input);
     this.updateEnemies(dt);
     this.resolveAttack();
     if (this.player.hp <= 0) { this.finish('over'); return; }
@@ -145,12 +153,17 @@ export class GameSession {
     this.dodgeCooldown = Math.max(0, this.dodgeCooldown - dt);
     this.strongCooldown = Math.max(0, this.strongCooldown - dt);
     this.attackBuffer = Math.max(0, this.attackBuffer - dt);
+    this.strongBuffer = Math.max(0, this.strongBuffer - dt);
+    this.skillBuffer = Math.max(0, this.skillBuffer - dt);
     this.chainTimer = Math.max(0, this.chainTimer - dt);
     player.hurt = this.hitInvincible > 0;
     const length = Math.hypot(input.moveX, input.moveZ);
     const mx = length > 0 ? input.moveX / Math.max(1, length) : 0;
     const mz = length > 0 ? input.moveZ / Math.max(1, length) : 0;
+    this.inputHeading = length > 0 ? Math.atan2(mx, mz) : null;
     if (input.attack) this.attackBuffer = COMBAT_CONFIG.inputBuffer;
+    if (input.strong) this.strongBuffer = COMBAT_CONFIG.inputBuffer;
+    if (input.skill && player.power >= BUDDHA_SKILL.powerCost) this.skillBuffer = COMBAT_CONFIG.inputBuffer;
 
     if (input.dodge && this.dodgeCooldown <= 1e-9 && player.attackKind !== 'skill') {
       this.dodgeTimer = PLAYER_CONFIG.dodgeDuration;
@@ -160,6 +173,8 @@ export class GameSession {
       player.rotation = Math.atan2(this.dodgeX, this.dodgeZ);
       player.attackKind = null;
       this.attackBuffer = 0;
+      this.strongBuffer = 0;
+      this.skillBuffer = 0;
       this.chainTimer = 0;
     }
 
@@ -180,34 +195,51 @@ export class GameSession {
         const delta = Math.atan2(Math.sin(target - player.rotation), Math.cos(target - player.rotation));
         player.rotation += delta * Math.min(1, PLAYER_CONFIG.rotationSpeed * dt);
       }
-      if (input.skill && player.power >= BUDDHA_SKILL.powerCost) this.beginAttack('skill');
-      else if (input.strong && this.strongCooldown <= 1e-9) this.beginAttack('strong');
+      if (this.skillBuffer > 0 && player.power >= BUDDHA_SKILL.powerCost) this.beginAttack('skill');
+      else if (this.strongBuffer > 0 && this.strongCooldown <= 1e-9) this.beginAttack('strong');
       else if (this.attackBuffer > 0) this.beginAttack('normal');
+    }
+    // Heavy attacks may cancel a normal's recovery, so holding J never traps K/L.
+    else if (player.attackKind !== 'skill') {
+      if (this.skillBuffer > 0 && player.power >= BUDDHA_SKILL.powerCost) this.beginAttack('skill');
+      else if (player.attackKind === 'normal' && player.attackProgress >= COMBAT_CONFIG.strongCancelProgress && this.strongBuffer > 0 && this.strongCooldown <= 1e-9) this.beginAttack('strong');
     }
     const moveSpeed = PLAYER_CONFIG.moveSpeed * (player.attackKind ? COMBAT_CONFIG.attackMoveFactor : 1);
     player.x = clampPosition(player.x + mx * moveSpeed * dt);
     player.z = clampPosition(player.z + mz * moveSpeed * dt);
 
     if (player.attackKind) {
+      const attack = this.attackDefinition();
+      const lungeDuration = attack.duration * COMBAT_CONFIG.hitEnd;
+      const lungeDt = Math.max(0, Math.min(dt, lungeDuration - this.attackTime));
+      const lunge = attack.lunge * lungeDt / lungeDuration;
+      player.x = clampPosition(player.x + Math.sin(player.rotation) * lunge);
+      player.z = clampPosition(player.z + Math.cos(player.rotation) * lunge);
       this.attackTime += dt;
-      player.attackProgress = Math.min(1, this.attackTime / this.attackDefinition().duration);
+      player.attackProgress = Math.min(1, this.attackTime / attack.duration);
       if (player.attackProgress >= 1 - 1e-9) {
         const wasNormal = player.attackKind === 'normal';
         this.nextStep = wasNormal ? (player.attackStep + 1) % NORMAL_ATTACKS.length : 0;
         this.chainTimer = wasNormal ? COMBAT_CONFIG.chainWindow : 0;
         player.attackKind = null;
         player.attackProgress = 0;
-        if (wasNormal && this.attackBuffer > 0) this.beginAttack('normal');
+        if (this.skillBuffer > 0 && player.power >= BUDDHA_SKILL.powerCost) this.beginAttack('skill');
+        else if (this.strongBuffer > 0 && this.strongCooldown <= 1e-9) this.beginAttack('strong');
+        else if (wasNormal && this.attackBuffer > 0) this.beginAttack('normal');
       }
     }
   }
 
   private beginAttack(kind: AttackKind): void {
+    if (this.inputHeading !== null) this.player.rotation = this.inputHeading;
+    if (kind === 'normal') this.assistFacing();
     this.player.attackKind = kind;
     this.player.attackStep = kind === 'normal' && this.chainTimer > 0 ? this.nextStep : 0;
     this.player.attackProgress = 0;
     this.attackTime = 0;
     this.attackBuffer = 0;
+    this.strongBuffer = 0;
+    this.skillBuffer = 0;
     this.hitEnemies.clear();
     this.attackEventSent = false;
     this.attackInstanceId++;
@@ -216,9 +248,25 @@ export class GameSession {
   }
 
   private attackDefinition() {
-    if (this.player.attackKind === 'skill') return { ...BUDDHA_SKILL, arcDeg: 360 };
-    if (this.player.attackKind === 'strong') return { ...STRONG_ATTACK, arcDeg: 360 };
+    if (this.player.attackKind === 'skill') return BUDDHA_SKILL;
+    if (this.player.attackKind === 'strong') return STRONG_ATTACK;
     return NORMAL_ATTACKS[this.player.attackStep];
+  }
+
+  private assistFacing(): void {
+    const player = this.player;
+    this.grid.queryRadius(player.x, player.z, COMBAT_CONFIG.targetAssistRadius, this.nearby);
+    let closest = Infinity;
+    let targetRotation = player.rotation;
+    for (const id of this.nearby) {
+      const enemy = this.enemies[id];
+      const dx = enemy.x - player.x; const dz = enemy.z - player.z;
+      const distance = Math.hypot(dx, dz);
+      if (enemy.hp <= 0 || distance < 0.6 || distance >= closest || !inAttackArc(dx, dz, player.rotation, COMBAT_CONFIG.targetAssistArc)) continue;
+      closest = distance;
+      targetRotation = Math.atan2(dx, dz);
+    }
+    player.rotation = targetRotation;
   }
 
   private syncGrid(): void {
@@ -237,11 +285,15 @@ export class GameSession {
         enemy.timer -= dt;
         enemy.x = clampPosition(enemy.x + enemy.vx * dt);
         enemy.z = clampPosition(enemy.z + enemy.vz * dt);
-        const drag = Math.exp(-ENEMY_CONFIG.knockbackDrag * dt);
+        enemy.y = Math.max(0, enemy.y + enemy.vy * dt - 0.5 * ENEMY_CONFIG.gravity * dt * dt);
+        enemy.vy -= ENEMY_CONFIG.gravity * dt;
+        enemy.spin += enemy.angularVelocity * dt;
+        if (enemy.y === 0 && enemy.vy < 0) { enemy.vy = 0; enemy.angularVelocity *= Math.exp(-12 * dt); }
+        const drag = Math.exp(-(enemy.y > 0 ? ENEMY_CONFIG.knockbackDrag : ENEMY_CONFIG.groundDrag) * dt);
         enemy.vx *= drag; enemy.vz *= drag;
-        if (enemy.timer <= 1e-9) {
+        if (enemy.timer <= 1e-9 && enemy.y <= 0) {
           if (enemy.state === 'dead') { enemy.state = 'inactive'; this.pool.release(enemy); }
-          else { enemy.state = 'chase'; enemy.vx = 0; enemy.vz = 0; }
+          else { enemy.state = 'chase'; enemy.vx = 0; enemy.vz = 0; enemy.spin = 0; enemy.angularVelocity = 0; }
         }
         if (enemy.state !== 'dead' && enemy.state !== 'inactive') this.grid.update(enemy.id, enemy.x, enemy.z);
         continue;
@@ -291,7 +343,7 @@ export class GameSession {
 
   private hitPlayer(): void {
     const dodgeAge = PLAYER_CONFIG.dodgeDuration - this.dodgeTimer;
-    const invincible = this.hitInvincible > 1e-9 || (this.player.dodging && dodgeAge <= PLAYER_CONFIG.dodgeInvincibleDuration + 1e-9);
+    const invincible = this.hitInvincible > 1e-9 || this.player.attackKind === 'skill' || (this.player.dodging && dodgeAge <= PLAYER_CONFIG.dodgeInvincibleDuration + 1e-9);
     if (invincible || this.player.hp <= 0) return;
     this.player.hp = damageHp(this.player.hp, ENEMY_CONFIG.attackDamage);
     this.hitInvincible = PLAYER_CONFIG.hitInvincibleDuration;
@@ -304,7 +356,7 @@ export class GameSession {
     if (!player.attackKind || player.hp <= 0 || player.attackProgress < COMBAT_CONFIG.hitStart || player.attackProgress > COMBAT_CONFIG.hitEnd) return;
     const attack = this.attackDefinition();
     if (!this.attackEventSent) {
-      this.events.push({ kind: player.attackKind === 'normal' ? 'slash' : player.attackKind, x: player.x, z: player.z, rotation: player.rotation });
+      this.events.push({ kind: player.attackKind === 'normal' ? 'slash' : player.attackKind, x: player.x, z: player.z, rotation: player.rotation, attackKind: player.attackKind, attackStep: player.attackStep });
       this.attackEventSent = true;
     }
     this.grid.queryRadius(player.x, player.z, attack.radius, this.nearby);
@@ -319,14 +371,16 @@ export class GameSession {
       const distance = Math.hypot(dx, dz);
       enemy.vx = (distance > 0.001 ? dx / distance : Math.sin(player.rotation)) * attack.knockback;
       enemy.vz = (distance > 0.001 ? dz / distance : Math.cos(player.rotation)) * attack.knockback;
+      enemy.vy = attack.launch;
+      enemy.angularVelocity = (enemy.id % 2 === 0 ? 1 : -1) * (player.attackKind === 'normal' ? 5 : 10);
       this.attackers.delete(id);
       this.comboSystem.hit();
-      this.events.push({ kind: 'hit', x: enemy.x, z: enemy.z });
+      this.events.push({ kind: 'hit', x: enemy.x, z: enemy.z, attackKind: player.attackKind, attackStep: player.attackStep });
       if (enemy.hp === 0) {
         enemy.state = 'dead'; enemy.timer = ENEMY_CONFIG.deathDuration;
         this.grid.remove(id);
         this.kills++;
-        this.events.push({ kind: 'death', x: enemy.x, z: enemy.z });
+        this.events.push({ kind: 'death', x: enemy.x, z: enemy.z, attackKind: player.attackKind, attackStep: player.attackStep });
       } else {
         enemy.state = 'knockback'; enemy.timer = ENEMY_CONFIG.knockbackDuration;
       }
@@ -354,7 +408,7 @@ export class GameSession {
     }
     Object.assign(enemy, {
       x, z, rotation: Math.atan2(this.player.x - x, this.player.z - z), hp: ENEMY_CONFIG.maxHp,
-      state: 'chase', timer: 0, flash: 0, vx: 0, vz: 0,
+      state: 'chase', timer: 0, flash: 0, vx: 0, vz: 0, y: 0, vy: 0, spin: 0, angularVelocity: 0,
       speed: this.between(ENEMY_CONFIG.moveSpeedMin, ENEMY_CONFIG.moveSpeedMax),
       cooldown: this.between(0.3, ENEMY_CONFIG.attackIntervalMin),
     });

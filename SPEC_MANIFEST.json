@@ -1,6 +1,6 @@
 {
   "name": "buddha-musou-prototype-spec",
-  "version": "1.0.0-prototype",
+  "version": "1.1.0-musou-combat",
   "goal": "Minimum playable browser prototype",
   "documents": [
     "GAME_SPEC.md",
