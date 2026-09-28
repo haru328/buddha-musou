@@ -2,18 +2,19 @@ import './style.css';
 import { Game } from './game/Game';
 
 const root = document.querySelector<HTMLElement>('#game-root');
-const status = document.querySelector<HTMLElement>('#boot-status');
-if (!root || !status) throw new Error('起動に必要な画面要素がありません。');
+if (!root) throw new Error('ゲームの表示領域がありません。');
 
 let game: Game | undefined;
 try {
   game = new Game(root);
   game.start();
-  status.textContent = '3D描画が起動しました';
 } catch (error) {
   game?.dispose();
-  status.setAttribute('role', 'alert');
-  status.textContent = '3D画面を起動できませんでした。Chrome / EdgeのWebGL設定を確認し、再読み込みしてください。';
+  const message = document.createElement('section');
+  message.className = 'boot-screen';
+  message.setAttribute('role', 'alert');
+  message.textContent = '3D画面を起動できませんでした。Chrome / EdgeのWebGL設定を確認し、再読み込みしてください。';
+  root.replaceChildren(message);
   console.error('3D画面の起動に失敗しました。', error);
 }
 

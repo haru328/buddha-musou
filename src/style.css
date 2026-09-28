@@ -1,23 +1,96 @@
-:root {
-  font-family: "Yu Gothic UI", "Meiryo", sans-serif;
-  color: #f3eddf;
-  background: #171c1e;
-  font-synthesis: none;
-}
-
+:root { font-family: "Yu Gothic UI", "Meiryo", sans-serif; color: #f7efdc; background: #152323; font-synthesis: none; --gold: #dfbb73; }
 * { box-sizing: border-box; }
 body { margin: 0; }
-#game-root { position: relative; width: 100%; height: 100dvh; overflow: hidden; }
-canvas { display: block; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid #fff2c8; outline-offset: 5px; }
+[hidden] { display: none !important; }
+#game-root { position: relative; width: 100%; height: 100dvh; min-height: 480px; overflow: hidden; }
+canvas { display: block; width: 100%; height: 100%; }
 #ui-root { position: absolute; inset: 0; pointer-events: none; }
-.info-panel { margin: 32px; max-width: 410px; padding: 24px; background: #171c1ee6; border-left: 2px solid #d4a653; }
-.eyebrow { margin: 0 0 12px; color: #d4a653; font-size: 12px; letter-spacing: 0.12em; }
-h1 { margin: 0 0 20px; font-size: clamp(26px, 4vw, 36px); font-weight: 600; }
-h1 span { font-size: 0.55em; }
-#boot-status { font-size: 15px; line-height: 1.7; }
-#boot-status[role="alert"] { color: #ffb4a7; }
-.note { margin-bottom: 0; color: #b5bbb9; font-size: 13px; line-height: 1.9; }
-.viewport-note { position: absolute; bottom: 20px; right: 32px; color: #b5bbb9; font-size: 12px; }
-@media (max-width: 600px) {
-  .info-panel { margin: 16px; padding: 18px; }
+#ui-root button { pointer-events: auto; }
+.screen-vignette { position: absolute; inset: 0; box-shadow: inset 0 0 160px #07131190; pointer-events: none; }
+.screen { position: absolute; inset: 0; }
+.title-screen { padding: 38px 5vw; background: linear-gradient(90deg, #0c181bef 0%, #0c181bb0 28%, #0c181b15 60%, transparent 85%); }
+.brand { display: flex; gap: 12px; align-items: center; font-size: 11px; letter-spacing: .22em; color: var(--gold); }
+.brand small { display: block; font-size: 9px; letter-spacing: .13em; color: #a3aea8; margin-top: 5px; }
+.brand-mark { display: grid; place-items: center; width: 34px; height: 38px; border: 1px solid #b8985866; font: 22px "Yu Mincho", serif; }
+.title-copy { position: absolute; left: 7vw; top: 22%; max-width: 570px; }
+.eyebrow { color: var(--gold); font-size: 11px; letter-spacing: .24em; margin: 0 0 18px; }
+h1, h2 { font-family: "Yu Mincho", "Noto Serif JP", serif; }
+h1 { font-size: clamp(56px, 6.5vw, 110px); font-weight: 900; line-height: 1.15; letter-spacing: .02em; margin: 0; text-shadow: 0 4px 28px #091818; }
+h1 span { color: var(--gold); }
+h1 small { display: block; font: 12px "Yu Gothic UI", sans-serif; letter-spacing: .2em; color: #b7bdb1; margin-top: 8px; }
+.gold-rule { width: 45px; height: 2px; background: var(--gold); margin: 25px 0; }
+.title-description { font-size: 14px; line-height: 2.1; color: #c7cec4; margin-bottom: 28px; }
+.primary-button { display: flex; align-items: center; justify-content: space-between; gap: 32px; width: 320px; max-width: 100%; min-height: 56px; padding: 14px 22px; border: 1px solid #edd098; border-radius: 2px; background: linear-gradient(110deg, #e6c78a, #bc944e); color: #182322; font-weight: 700; letter-spacing: .08em; box-shadow: 0 6px 30px #0003; transition: filter .16s, transform .16s; }
+.primary-button:hover { filter: brightness(1.14); transform: translateY(-2px); }
+.primary-button span { font: 11px "Yu Gothic UI", sans-serif; white-space: nowrap; letter-spacing: .06em; }
+.title-tip { color: #94a39b; font-size: 11px; margin-top: 16px; }
+kbd { font: 10px "Yu Gothic UI", sans-serif; display: inline-block; padding: 3px 6px; margin-right: 4px; border: 1px solid #adbaa155; border-radius: 3px; color: #e2e5d9; background: #17262688; line-height: 1.3; }
+.title-footer { position: absolute; bottom: 28px; left: 5vw; right: 5vw; border-top: 1px solid #b6c3a622; padding-top: 20px; display: flex; justify-content: space-between; gap: 20px; align-items: center; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 20px; font-size: 11px; color: #b8c2b7; }
+.controls > span { white-space: nowrap; }
+.prototype-label { font-size: 9px; letter-spacing: .15em; color: #83978a; white-space: nowrap; }
+.stage-name { position: absolute; right: 5vw; top: 32%; margin: 0; color: #d1b273; font: 26px "Yu Mincho", serif; text-align: center; }
+.stage-name span { display: block; writing-mode: vertical-rl; font-size: 14px; letter-spacing: .4em; margin: 20px auto 0; border-top: 1px solid #c9ae7466; padding-top: 20px; }
+.hud { position: absolute; inset: 0; }
+.vitals { position: absolute; top: 28px; left: 32px; width: 285px; padding: 16px 18px; background: linear-gradient(110deg, #0d1a1cea, #0d1a1c80); border-left: 2px solid #d6b575aa; }
+.vitals-title { display: flex; align-items: center; gap: 12px; font-family: "Yu Mincho", serif; font-size: 17px; margin-bottom: 17px; }
+.vitals-title small { display: block; font: 9px "Yu Gothic UI", sans-serif; color: #a3b4a6; margin-top: 4px; }
+.small-seal { color: var(--gold); font-size: 25px; }
+.meter-label { display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #d9e6ce; margin: 0 0 5px; }
+.meter { height: 9px; background: #0006; border: 1px solid #d9ddb529; padding: 1px; }
+.meter > div { height: 100%; transform-origin: left; transition: transform .1s; }
+.hp-meter > div { background: linear-gradient(90deg, #799855, #b7d18d); }
+.power-label { margin-top: 12px; color: #e1c685; }
+.power-meter { height: 7px; }
+.power-meter > div { background: linear-gradient(90deg, #aa7b38, #f3d68c); }
+.skill-label { margin: 10px 0 0; color: #8f9c8d; font-size: 11px; letter-spacing: .06em; }
+.skill-label.ready { color: #fff0ac; text-shadow: 0 0 16px #f2c46e99; animation: breathe 1s ease-in-out infinite alternate; }
+.objective { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); text-align: center; text-shadow: 0 2px 10px #071613; min-width: 140px; padding: 12px 24px; background: radial-gradient(ellipse, #10231dd9, transparent 75%); }
+.objective > span { display: block; font: 11px "Yu Mincho", serif; letter-spacing: .2em; color: #e2d7b0; }
+.objective strong { display: block; font-weight: 400; font-size: 33px; margin: 5px 0 0; }
+.objective b { font-weight: 500; }
+.objective i { font-size: 17px; font-style: normal; color: #a4b3a2; }
+.objective small { color: #b1bea7; font-size: 10px; letter-spacing: .3em; }
+.pause-button { position: absolute; top: 30px; right: 32px; display: flex; align-items: center; gap: 10px; background: #12221bb3; color: #e1e6d8; border: 1px solid #bccea633; padding: 9px 14px; border-radius: 2px; }
+.pause-button span { font-size: 10px; color: #9da990; }
+.combo-panel { position: absolute; right: 42px; top: 32%; text-align: right; opacity: 0; transform: translateX(12px); transition: opacity .2s, transform .2s; text-shadow: 0 3px 12px #122219; }
+.combo-panel.active { opacity: 1; transform: none; }
+.combo-panel strong { display: block; font-size: 70px; font-weight: 300; line-height: 1; color: #eee2b8; font-variant-numeric: tabular-nums; }
+.combo-panel.large strong { color: #ffd67e; }
+.combo-panel span { color: #d4ba7c; font-size: 12px; letter-spacing: .22em; }
+.combo-track { width: 85px; height: 2px; background: #e3d19733; margin: 10px 0 0 auto; }
+.combo-track > div { background: #e1bd72; width: 100%; height: 100%; transform-origin: left; transition: transform .1s linear; }
+.battle-footer { position: absolute; bottom: 24px; left: 32px; right: 32px; display: flex; justify-content: space-between; gap: 15px; padding: 14px 20px; background: linear-gradient(90deg, #0d1a1ccc, #0d1a1c33); border-top: 1px solid #e3cb9622; }
+#time-value { color: #a9b5a2; font-size: 12px; font-variant-numeric: tabular-nums; }
+.hurt-overlay { position: absolute; inset: 0; box-shadow: inset 0 0 100px #b2392660; opacity: 0; transition: opacity .15s; pointer-events: none; }
+.hurt-overlay.visible { opacity: 1; }
+.modal-screen { display: grid; place-items: center; background: #091512c9; backdrop-filter: blur(5px); pointer-events: auto; }
+.modal-card { width: 440px; max-width: calc(100vw - 48px); padding: 40px 44px; text-align: center; background: linear-gradient(145deg, #1d2b28ed, #10221aef); border: 1px solid #b7a26944; box-shadow: 0 20px 100px #0006; }
+.modal-card h2 { font-size: 34px; font-weight: 600; margin: 10px 0 16px; color: #f1ddb3; }
+.modal-card p:not(.eyebrow) { color: #aebba8; font-size: 12px; line-height: 1.9; }
+.modal-card .primary-button { margin: 26px auto 10px; width: 100%; }
+.text-button { display: block; margin: 14px auto 0; padding: 9px 10px; font-size: 12px; background: transparent; color: #a9b9a7; border: 0; }
+.text-button:hover { color: #f1d79e; }
+.result-stats { display: flex; gap: 15px; justify-content: space-between; margin: 32px 0; padding: 24px 0; border-top: 1px solid #c3b48133; border-bottom: 1px solid #c3b48133; }
+.result-stats dt { font-size: 10px; color: #a0b19e; }
+.result-stats dd { font-size: 28px; color: #ead6a5; margin: 8px 0 0; font-variant-numeric: tabular-nums; }
+.debug-panel { position: absolute; bottom: 92px; left: 32px; background: #07120ed9; border: 1px solid #c1d1a855; color: #cde3b3; font: 11px/1.6 monospace; padding: 14px 18px; margin: 0; }
+.boot-screen { padding: 40px; color: #e3c388; }
+.boot-screen h1 { font-size: 34px; }
+@keyframes breathe { to { opacity: .65; } }
+@media (max-height: 760px) {
+  .title-copy { top: 19%; } h1 { font-size: 64px; }
+  .gold-rule { margin: 16px 0; } .title-description { margin: 12px 0 20px; }
+  .title-footer { bottom: 20px; } .title-tip { margin-top: 10px; }
 }
+@media (max-width: 1000px) {
+  .title-copy { left: 5vw; }
+  .title-screen { background: linear-gradient(90deg, #0c181bf0, #0c181b80 55%, transparent); }
+  .controls { gap: 8px 12px; font-size: 10px; }
+  .prototype-label { display: none; }
+  .vitals { width: 240px; left: 20px; top: 20px; }
+  .battle-footer { left: 20px; right: 20px; bottom: 15px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
