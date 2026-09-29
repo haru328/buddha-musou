@@ -1,5 +1,7 @@
 import type { GameSession } from '../game/GameSession';
 import { CLEAR_KILLS, COMBAT_CONFIG, PLAYER_CONFIG } from '../config/balance';
+import { BATTLEFIELD } from '../world/battlefield';
+import { BattleMap } from './BattleMap';
 
 interface Actions {
   start: () => void;
@@ -16,7 +18,7 @@ export interface PerformanceStats {
   geometries: number;
 }
 
-const controls = `<span><kbd>W A S D</kbd><kbd>↑ ↓ ← →</kbd> 移動</span><span><kbd>J</kbd> 長押し連撃</span><span><kbd>K</kbd> 強攻撃</span><span><kbd>L</kbd> 仏技</span><span><kbd>Space</kbd> 回避</span>`;
+const controls = `<span><kbd>W A S D</kbd> 画面基準移動</span><span><kbd>J</kbd> 長押し連撃</span><span><kbd>K</kbd> 強攻撃</span><span><kbd>L</kbd> 仏技</span><span><kbd>Space</kbd> 回避</span><span><kbd>Q E</kbd> 視点旋回</span><span><kbd>C</kbd> 背後へ</span>`;
 
 function clock(seconds: number): string {
   return `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
@@ -32,6 +34,7 @@ export class GameUI {
   private feedbackAnimation: Animation | undefined;
   private flashAnimation: Animation | undefined;
   private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  private readonly battleMap: BattleMap;
 
   constructor(private readonly root: HTMLElement, actions: Actions) {
     root.innerHTML = `
@@ -42,12 +45,12 @@ export class GameUI {
           <p class="eyebrow">一振りで、千の魂を解き放て。</p>
           <h1 id="game-title">仏像<span>無双</span><small>BUDDHA MUSOU / 仮題</small></h1>
           <div class="gold-rule"></div>
-          <p class="title-description">押し寄せる落武者を、錫杖の一撃で薙ぎ払え。<br>千の魂を鎮める、仏の戦いが始まる。</p>
+          <p class="title-description">三つの拠点を巡り、巨躯の怨将を討て。<br>千体撃破と三将討伐で、寺院に安らぎを。</p>
           <button id="start-button" class="primary-button" type="button">出 陣 <span>ENTER →</span></button>
           <p class="title-tip"><kbd>J</kbd> 連撃で溜める。<kbd>K</kbd> 一掃する。<kbd>L</kbd> 解き放つ。</p>
         </div>
         <footer class="title-footer"><div class="controls">${controls}</div><span class="prototype-label">PROTOTYPE · PC / KEYBOARD</span></footer>
-        <p class="stage-name"><b>第一陣</b><span>荒廃した寺院</span><small>千体撃破</small></p>
+        <p class="stage-name"><b>第一陣</b><span>荒廃した寺院</span><small>千体撃破・三将討伐</small></p>
       </section>
 
       <section id="hud" class="hud" aria-label="戦闘状況" hidden>
@@ -60,7 +63,10 @@ export class GameUI {
           <div id="power-meter" class="meter power-meter" role="progressbar" aria-label="仏力" aria-valuemin="0" aria-valuemax="${PLAYER_CONFIG.buddhistPowerMax}"><div id="power-fill"></div></div>
           <p id="skill-label" class="skill-label"><kbd>L</kbd> 仏光陣</p>
         </div>
-        <div class="objective"><span>撃破目標 <b>${CLEAR_KILLS}</b></span><strong><b id="kills-value">0</b><i> K.O.</i></strong><small>荒廃した寺院</small></div>
+        <div class="objective"><span>撃破目標 <b>${CLEAR_KILLS}</b></span><strong><b id="kills-value">0</b><i> K.O.</i></strong><small id="commanders-value">怨将討伐 0 / 3</small></div>
+        <aside class="map-panel" aria-label="戦場の地図"><div class="map-heading"><span>戦場全図</span><small>視点追従</small></div><canvas id="battle-map" class="battle-map" role="img" aria-label="荒廃した寺院の全図。金の矢印は自分、赤い点は敵、菱形は怨将。"></canvas><div class="map-legend"><span>▲ 自分</span><span>● 敵</span><span>◆ 怨将</span></div></aside>
+        <div class="navigation-panel"><span id="zone-value">金剛門前</span><strong id="navigation-value"></strong><small>◆ 三拠点の怨将を討伐</small></div>
+        <div id="commander-panel" class="commander-panel" hidden><div><span id="commander-name"></span><span id="commander-hp-value"></span></div><div id="commander-hp-meter" class="commander-hp-meter" role="progressbar" aria-label="怨将の体力" aria-valuemin="0"><div id="commander-hp-fill"></div></div><p id="commander-warning">巨躯の怨将</p></div>
         <div id="combo-panel" class="combo-panel"><strong id="combo-value">0</strong><span>連撃 <b>COMBO</b></span><div class="combo-track"><div id="combo-fill"></div></div></div>
         <button id="pause-button" class="pause-button" type="button" aria-label="一時停止">Ⅱ <span>Esc</span></button>
         <button id="sound-button" class="sound-button" type="button" aria-label="効果音" aria-pressed="true" title="効果音の切り替え (M)">音 ON</button>
@@ -71,7 +77,7 @@ export class GameUI {
       </section>
 
       <section id="pause-screen" class="screen modal-screen" aria-labelledby="pause-title" hidden>
-        <div class="modal-card"><p class="eyebrow">PAUSED</p><h2 id="pause-title">ひと息、整える。</h2><p>戦闘は一時停止しています。</p>
+        <div class="modal-card"><p class="eyebrow">PAUSED</p><h2 id="pause-title">ひと息、整える。</h2><p>戦闘は一時停止しています。<br>千体撃破と三拠点の怨将討伐で勝利。</p>
         <button id="resume-button" class="primary-button" type="button">戦いへ戻る <span>Esc →</span></button>
         <button id="pause-title-button" class="text-button" type="button">タイトルへ戻る</button></div>
       </section>
@@ -85,6 +91,7 @@ export class GameUI {
       <pre id="debug-panel" class="debug-panel" hidden></pre>
     `;
     root.querySelectorAll<HTMLElement>('[id]').forEach((element) => this.elements.set(element.id, element));
+    this.battleMap = new BattleMap(this.el('battle-map') as HTMLCanvasElement);
     const bind = (id: string, action: () => void) => {
       this.el(id).addEventListener('click', action, { signal: this.abort.signal });
     };
@@ -144,7 +151,7 @@ export class GameUI {
     this.el('combat-feedback').classList.remove('visible');
   }
 
-  update(session: GameSession, stats: PerformanceStats): void {
+  update(session: GameSession, stats: PerformanceStats, heading = Math.PI): void {
     const { player, state } = session;
     if (this.lastState !== state) {
       this.resetFeedback();
@@ -169,6 +176,8 @@ export class GameUI {
     this.el('skill-label').classList.toggle('ready', player.power >= PLAYER_CONFIG.buddhistPowerMax);
     this.text('skill-label', player.power >= PLAYER_CONFIG.buddhistPowerMax ? '[L] 仏光陣 発動可能' : '[L] 仏光陣');
     this.text('kills-value', String(session.kills));
+    this.text('commanders-value', `怨将討伐 ${session.commandersDefeated} / ${session.totalCommanders}`);
+    if (state === 'playing' || state === 'paused') this.updateBattlefield(session, heading);
     this.text('combo-value', String(session.combo));
     this.el('combo-panel').classList.toggle('active', session.combo > 0);
     this.el('combo-panel').classList.toggle('large', session.combo >= 20);
@@ -183,14 +192,55 @@ export class GameUI {
       const clear = session.result === 'clear';
       this.text('result-eyebrow', clear ? 'ALL SOULS RELEASED' : 'BATTLE ENDED');
       this.text('result-title', clear ? '成仏完了' : '力尽きた……');
-      this.text('result-description', clear ? '千の魂に、安らぎを。' : '回避で間合いを取り、強攻撃で群れを崩そう。');
+      this.text('result-description', clear ? '三将を鎮め、千の魂に安らぎを。' : `怨将討伐 ${session.commandersDefeated} / ${session.totalCommanders}。地図の菱形を追い、仏技で巨躯を崩そう。`);
       this.text('result-kills', String(session.kills));
       this.text('result-combo', String(session.maxCombo));
       this.text('result-time', clock(session.elapsed));
     }
     if (this.debugVisible) {
       const enemies = session.enemies.filter((enemy) => enemy.state !== 'inactive' && enemy.state !== 'dead').length;
-      this.text('debug-panel', `F3 · DEBUG\nFPS           ${stats.fps}\nActive Enemies ${enemies}\nKills         ${session.kills}\nDraw Calls    ${stats.drawCalls}\nTriangles     ${stats.triangles}\nGeometries    ${stats.geometries}`);
+      this.text('debug-panel', `F3 · DEBUG\nFPS           ${stats.fps}\nActive Enemies ${enemies}\nKills         ${session.kills}\nCommanders    ${session.commandersDefeated} / ${session.totalCommanders}\nPlayer X/Z    ${player.x.toFixed(1)} / ${player.z.toFixed(1)}\nCamera        ${((heading * 180 / Math.PI % 360 + 360) % 360).toFixed(1)}°\nDraw Calls    ${stats.drawCalls}\nTriangles     ${stats.triangles}\nGeometries    ${stats.geometries}`);
+    }
+  }
+
+  private updateBattlefield(session: GameSession, heading: number): void {
+    const { player } = session;
+    this.battleMap.update(session, heading);
+    let zone = BATTLEFIELD.zones[0];
+    let zoneDistance = Infinity;
+    for (const candidate of BATTLEFIELD.zones) {
+      const distance = Math.hypot(candidate.x - player.x, candidate.z - player.z);
+      if (distance < zoneDistance) { zone = candidate; zoneDistance = distance; }
+    }
+    this.text('zone-value', zone.name);
+    let nearest: (typeof session.enemies)[number] | undefined;
+    let distance = Infinity;
+    for (const enemy of session.enemies) {
+      if (enemy.kind !== 'commander' || enemy.hp <= 0 || enemy.state === 'inactive') continue;
+      const candidateDistance = Math.hypot(enemy.x - player.x, enemy.z - player.z);
+      if (candidateDistance < distance) { nearest = enemy; distance = candidateDistance; }
+    }
+    if (nearest) {
+      const dx = nearest.x - player.x, dz = nearest.z - player.z;
+      const right = -Math.cos(heading) * dx + Math.sin(heading) * dz;
+      const forward = Math.sin(heading) * dx + Math.cos(heading) * dz;
+      const arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+      const arrow = arrows[(Math.round(Math.atan2(right, forward) / (Math.PI / 4)) + 8) % 8];
+      const outpost = BATTLEFIELD.outposts.find((candidate) => candidate.id === nearest.outpostId);
+      this.text('navigation-value', `${arrow} ${outpost?.name ?? nearest.name} · ${Math.ceil(distance)} m`);
+    } else {
+      this.text('navigation-value', session.kills < CLEAR_KILLS ? `三将討伐完了 · あと ${CLEAR_KILLS - session.kills} 体` : '全目標達成');
+    }
+    const showCommander = nearest !== undefined && distance <= 25;
+    this.el('commander-panel').hidden = !showCommander;
+    if (showCommander && nearest) {
+      this.text('commander-name', nearest.name);
+      this.text('commander-hp-value', `${Math.ceil(nearest.hp)} / ${nearest.maxHp}`);
+      this.el('commander-hp-fill').style.transform = `scaleX(${Math.max(0, nearest.hp / nearest.maxHp)})`;
+      this.el('commander-hp-meter').setAttribute('aria-valuenow', String(nearest.hp));
+      this.el('commander-hp-meter').setAttribute('aria-valuemax', String(nearest.maxHp));
+      this.el('commander-panel').classList.toggle('warning', nearest.state === 'windup');
+      this.text('commander-warning', nearest.state === 'windup' ? '危険 · 大振り攻撃！ 回避で離れよ' : '巨躯の怨将 · 強攻撃と仏技で崩せ');
     }
   }
 

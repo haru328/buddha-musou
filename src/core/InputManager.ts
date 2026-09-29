@@ -1,6 +1,6 @@
 const GAME_KEYS = new Set([
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyJ', 'KeyK', 'KeyL', 'Space',
+  'KeyJ', 'KeyK', 'KeyL', 'Space', 'KeyQ', 'KeyE', 'KeyC', 'KeyM',
 ]);
 
 export class InputManager {

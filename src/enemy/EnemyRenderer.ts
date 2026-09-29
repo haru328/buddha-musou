@@ -1,13 +1,15 @@
-import { BoxGeometry, CircleGeometry, Color, ConeGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, Object3D, SphereGeometry, TorusGeometry } from 'three';
+import { BoxGeometry, CircleGeometry, Color, ConeGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshBasicMaterial, MeshStandardMaterial, Object3D, RingGeometry, SphereGeometry, TorusGeometry } from 'three';
 import type { BufferGeometry } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { disposeScene } from '../utils/disposeScene';
-import { ENEMY_CONFIG, SPAWN_CONFIG } from '../config/balance';
+import { ENEMY_CONFIG, ENEMY_KINDS, SPAWN_CONFIG } from '../config/balance';
+import type { EnemyKind } from '../game/GameSession';
 
 export interface EnemyPose {
   id: number; x: number; z: number; rotation: number; hp: number;
   state: 'inactive' | 'chase' | 'windup' | 'knockback' | 'dead'; timer: number; flash: number;
   y?: number; spin?: number;
+  kind?: EnemyKind; maxHp?: number; scale?: number;
 }
 
 export class EnemyRenderer extends Group {
@@ -17,10 +19,14 @@ export class EnemyRenderer extends Group {
   private readonly weapon = new Object3D();
   private readonly color = new Color();
   private readonly capacity = SPAWN_CONFIG.maxEnemies;
+  private readonly healthBack = new InstancedMesh(new BoxGeometry(1, 0.13, 0.055), new MeshBasicMaterial({ color: 0x100c13, depthTest: false }), SPAWN_CONFIG.maxEnemies);
+  private readonly healthFill = new InstancedMesh(new BoxGeometry(1, 0.085, 0.065), new MeshBasicMaterial({ color: 0xffffff, depthTest: false }), SPAWN_CONFIG.maxEnemies);
+  private readonly warningRing = new InstancedMesh(new RingGeometry(0.94, 1, 48), new MeshBasicMaterial({ color: 0xff3a20, transparent: true, opacity: 0.85, depthWrite: false }), SPAWN_CONFIG.maxEnemies);
+  private readonly warningArea = new InstancedMesh(new CircleGeometry(0.94, 48), new MeshBasicMaterial({ color: 0xff3318, transparent: true, opacity: 0.18, depthWrite: false }), SPAWN_CONFIG.maxEnemies);
 
   constructor() {
     super();
-    const armor = new MeshStandardMaterial({ color: 0x1e2228, metalness: 0.65, roughness: 0.4 });
+    const armor = new MeshStandardMaterial({ color: 0x747b83, metalness: 0.65, roughness: 0.4 });
     const rust = new MeshStandardMaterial({ color: 0x951b14, metalness: 0.4, roughness: 0.5 });
     const skin = new MeshStandardMaterial({ color: 0xa08b71, roughness: 0.9 });
     const blade = new MeshStandardMaterial({ color: 0xb5bdb5, metalness: 0.65, roughness: 0.32 });
@@ -77,14 +83,24 @@ export class EnemyRenderer extends Group {
       for (const part of source) { retired.add(part.mesh.geometry); part.mesh.dispose(); this.remove(part.mesh); }
     }
     for (const geometry of retired) if (!this.pieces.some((piece) => piece.mesh.geometry === geometry)) geometry.dispose();
+    for (const overlay of [this.healthBack, this.healthFill, this.warningRing, this.warningArea]) {
+      overlay.frustumCulled = false;
+      overlay.renderOrder = overlay === this.healthFill ? 12 : 11;
+      this.add(overlay);
+    }
+    this.healthBack.name = 'enemy-health-background';
+    this.healthFill.name = 'enemy-health-fill';
   }
 
-  update(enemies: ReadonlyArray<EnemyPose>, time: number): void {
+  update(enemies: ReadonlyArray<EnemyPose>, time: number, cameraYaw = 0, cameraPosition?: { x: number; y: number; z: number }): void {
     for (let i = 0; i < this.capacity; i++) {
       const enemy = enemies[i];
       const active = enemy && enemy.state !== 'inactive';
-      const scale = !active ? 0 : enemy.state === 'dead' ? Math.max(0, Math.min(1, enemy.timer / Math.min(0.45, ENEMY_CONFIG.deathDuration))) : 1;
-      this.color.set(!active || enemy.flash <= 0 ? 0xffffff : 0xffdfa0);
+      const kind = enemy?.kind ?? 'grunt';
+      const config = ENEMY_KINDS[kind];
+      const scale = (!active ? 0 : enemy.state === 'dead' ? Math.max(0, Math.min(1, enemy.timer / Math.min(0.45, ENEMY_CONFIG.deathDuration))) : 1) * (enemy?.scale ?? 1);
+      this.color.set(kind === 'commander' ? 0xffc24b : kind === 'elite' ? 0xc97de8 : kind === 'veteran' ? 0x7bc8f4 : 0x79716b);
+      if (active && enemy.flash > 0) this.color.set(0xffdfa0);
       if (active && enemy.state === 'windup') this.color.set(0xff9e79);
       for (const piece of this.pieces) {
         if (active) {
@@ -96,15 +112,43 @@ export class EnemyRenderer extends Group {
         this.rootTransform.updateMatrix();
         this.temp.copy(this.rootTransform.matrix);
         if (active && piece.animate === 'weapon' && enemy.state === 'windup') {
-          this.weapon.rotation.x = -1.65 * Math.max(0, Math.min(1, enemy.timer / ENEMY_CONFIG.windup)); this.weapon.updateMatrix(); this.temp.multiply(this.weapon.matrix);
+          this.weapon.rotation.x = -1.65 * Math.max(0, Math.min(1, enemy.timer / config.windup)); this.weapon.updateMatrix(); this.temp.multiply(this.weapon.matrix);
         }
         this.temp.multiply(piece.local); piece.mesh.setMatrixAt(i, this.temp);
         if (piece.animate !== 'shadow') piece.mesh.setColorAt(i, this.color);
       }
+      const cameraDx = (enemy?.x ?? 0) - (cameraPosition?.x ?? 0);
+      const cameraDz = (enemy?.z ?? 0) - (cameraPosition?.z ?? 0);
+      const cameraDepth = cameraDx * Math.sin(cameraYaw) + cameraDz * Math.cos(cameraYaw);
+      const cameraDistance = Math.hypot(cameraDx, cameraDz);
+      const maxHp = enemy?.maxHp ?? config.maxHp;
+      const showHealth = active && kind !== 'grunt' && enemy.hp > 0 && (kind === 'commander' || enemy.hp < maxHp) && (!cameraPosition || cameraDepth > 1.5);
+      const barWidth = Math.min(config.scale * 1.7, cameraPosition ? cameraDistance * 0.1 : Infinity);
+      this.rootTransform.position.set(enemy?.x ?? 0, (enemy?.y ?? 0) + config.scale * 2.45 + 0.35, enemy?.z ?? 0);
+      this.rootTransform.rotation.set(0, cameraYaw + Math.PI, 0);
+      this.rootTransform.scale.set(showHealth ? barWidth : 0, 1, 1);
+      this.rootTransform.updateMatrix(); this.healthBack.setMatrixAt(i, this.rootTransform.matrix);
+      const ratio = showHealth ? Math.max(0, Math.min(1, enemy.hp / maxHp)) : 0;
+      this.rootTransform.scale.x *= ratio;
+      this.rootTransform.position.x += Math.cos(cameraYaw) * barWidth * (1 - ratio) * 0.5;
+      this.rootTransform.position.z -= Math.sin(cameraYaw) * barWidth * (1 - ratio) * 0.5;
+      this.rootTransform.updateMatrix(); this.healthFill.setMatrixAt(i, this.rootTransform.matrix);
+      this.healthFill.setColorAt(i, this.color.set(kind === 'commander' ? 0xffb43d : kind === 'elite' ? 0xd681ff : 0x72ccff));
+      const warning = active && enemy.state === 'windup' && kind !== 'grunt';
+      this.rootTransform.position.set(enemy?.x ?? 0, 0.07, enemy?.z ?? 0);
+      this.rootTransform.rotation.set(-Math.PI / 2, 0, 0);
+      this.rootTransform.scale.setScalar(warning ? config.reach : 0);
+      this.rootTransform.updateMatrix(); this.warningRing.setMatrixAt(i, this.rootTransform.matrix);
+      this.warningArea.setMatrixAt(i, this.rootTransform.matrix);
+      this.warningRing.setColorAt(i, this.color.setRGB(1, 0.55 + Math.sin(time * 18) * 0.3, 0.4));
     }
     for (const piece of this.pieces) {
       piece.mesh.instanceMatrix.needsUpdate = true;
       if (piece.mesh.instanceColor) piece.mesh.instanceColor.needsUpdate = true;
+    }
+    for (const overlay of [this.healthBack, this.healthFill, this.warningRing, this.warningArea]) {
+      overlay.instanceMatrix.needsUpdate = true;
+      if (overlay.instanceColor) overlay.instanceColor.needsUpdate = true;
     }
   }
 

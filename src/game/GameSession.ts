@@ -1,4 +1,5 @@
-import { BUDDHA_SKILL, CLEAR_KILLS, COMBAT_CONFIG, ENEMY_CONFIG, NORMAL_ATTACKS, PLAYER_CONFIG, SPAWN_CONFIG, SPATIAL_CELL_SIZE, STAGE_BOUND, STRONG_ATTACK } from '../config/balance';
+import { BUDDHA_SKILL, CLEAR_KILLS, COMBAT_CONFIG, COMMANDER_CONFIG, ENEMY_CONFIG, ENEMY_KINDS, NORMAL_ATTACKS, PLAYER_CONFIG, SPAWN_CONFIG, SPATIAL_CELL_SIZE, STAGE_BOUND, STRONG_ATTACK } from '../config/balance';
+import { BATTLEFIELD, hasLineOfSight, isWalkable, moveOnBattlefield, nextWaypoint } from '../world/battlefield';
 import { ComboSystem } from '../combat/ComboSystem';
 import { damageHp, inAttackArc } from '../combat/DamageSystem';
 import { ObjectPool } from '../core/ObjectPool';
@@ -7,6 +8,7 @@ import type { GameResult, GameState } from './GameState';
 
 export interface SessionInput { moveX: number; moveZ: number; attack: boolean; strong: boolean; skill: boolean; dodge: boolean }
 export type AttackKind = 'normal' | 'strong' | 'skill';
+export type EnemyKind = keyof typeof ENEMY_KINDS;
 export interface PlayerData {
   x: number; z: number; rotation: number; hp: number; power: number;
   moving: boolean; dodging: boolean; hurt: boolean; dead: boolean;
@@ -17,10 +19,11 @@ export interface EnemyData {
   state: 'inactive' | 'chase' | 'windup' | 'knockback' | 'dead';
   timer: number; flash: number; speed: number; cooldown: number; vx: number; vz: number;
   y: number; vy: number; spin: number; angularVelocity: number;
+  kind: EnemyKind; maxHp: number; name: string; scale: number; outpostId: string | null;
+  routeTimer: number; waypointX: number; waypointZ: number;
 }
 export interface GameEvent { kind: 'slash' | 'strong' | 'skill' | 'hit' | 'death' | 'playerHit'; x: number; z: number; rotation?: number; attackKind?: AttackKind; attackStep?: number }
 
-const clampPosition = (value: number): number => Math.max(-STAGE_BOUND, Math.min(STAGE_BOUND, value));
 const initialPlayer = (): PlayerData => ({
   x: 0, z: 0, rotation: Math.PI, hp: PLAYER_CONFIG.maxHp, power: 0,
   moving: false, dodging: false, hurt: false, dead: false,
@@ -35,6 +38,8 @@ export class GameSession {
   readonly enemies: readonly EnemyData[];
   readonly events: GameEvent[] = [];
   kills = 0;
+  commandersDefeated = 0;
+  readonly totalCommanders = COMMANDER_CONFIG.count;
   elapsed = 0;
   attackInstanceId = 0;
   private readonly pool: ObjectPool<EnemyData>;
@@ -63,6 +68,8 @@ export class GameSession {
     this.pool = new ObjectPool(SPAWN_CONFIG.maxEnemies, (id) => ({
       id, x: 0, z: 0, rotation: 0, hp: 0, state: 'inactive', timer: 0,
       flash: 0, speed: 0, cooldown: 0, vx: 0, vz: 0, y: 0, vy: 0, spin: 0, angularVelocity: 0,
+      kind: 'grunt', maxHp: ENEMY_KINDS.grunt.maxHp, name: '', scale: ENEMY_KINDS.grunt.scale, outpostId: null,
+      routeTimer: 0, waypointX: 0, waypointZ: 0,
     }));
     this.enemies = this.pool.items;
   }
@@ -72,11 +79,18 @@ export class GameSession {
   get maxCombo(): number { return this.comboSystem.max; }
   get activeEnemies(): number { return this.enemies.reduce((sum, enemy) => sum + Number(enemy.state !== 'inactive' && enemy.state !== 'dead'), 0); }
   get attackSlots(): number { return this.attackers.size; }
+  get activeCommanders(): EnemyData[] { return this.enemies.filter(enemy => enemy.kind === 'commander' && enemy.hp > 0 && enemy.state !== 'inactive'); }
 
   start(): void {
     this.reset();
     this.state = 'playing';
-    for (let index = 0; index < SPAWN_CONFIG.initialEnemies; index++) this.spawnEnemy();
+    for (const outpost of BATTLEFIELD.outposts.slice(0, this.totalCommanders)) {
+      const commander = this.pool.acquire()!;
+      this.initializeEnemy(commander, 'commander', outpost.x, outpost.z);
+      commander.outpostId = outpost.id;
+      commander.name = `${outpost.name}・怨将`;
+    }
+    for (let index = this.totalCommanders; index < SPAWN_CONFIG.initialEnemies; index++) this.spawnEnemy();
   }
 
   pause(): void { if (this.state === 'playing') this.state = 'paused'; }
@@ -87,6 +101,7 @@ export class GameSession {
     Object.assign(this.player, initialPlayer());
     this.result = null;
     this.kills = 0;
+    this.commandersDefeated = 0;
     this.elapsed = 0;
     this.attackInstanceId = 0;
     this.events.length = 0;
@@ -114,6 +129,7 @@ export class GameSession {
       enemy.state = 'inactive'; enemy.hp = 0; enemy.timer = 0; enemy.flash = 0;
       enemy.vx = 0; enemy.vz = 0; enemy.cooldown = 0;
       enemy.y = 0; enemy.vy = 0; enemy.spin = 0; enemy.angularVelocity = 0;
+      enemy.outpostId = null; enemy.routeTimer = 0;
     }
   }
 
@@ -128,7 +144,7 @@ export class GameSession {
     this.updateEnemies(dt);
     this.resolveAttack();
     if (this.player.hp <= 0) { this.finish('over'); return; }
-    if (this.kills >= CLEAR_KILLS) { this.finish('clear'); return; }
+    if (this.kills >= CLEAR_KILLS && this.commandersDefeated >= this.totalCommanders) { this.finish('clear'); return; }
     this.spawnTimer += dt;
     if (this.spawnTimer + 1e-9 >= SPAWN_CONFIG.interval) {
       this.spawnTimer -= SPAWN_CONFIG.interval;
@@ -182,8 +198,8 @@ export class GameSession {
     player.moving = length > 0;
     if (player.dodging) {
       const travelTime = Math.min(dt, this.dodgeTimer);
-      player.x = clampPosition(player.x + this.dodgeX * PLAYER_CONFIG.dodgeSpeed * travelTime);
-      player.z = clampPosition(player.z + this.dodgeZ * PLAYER_CONFIG.dodgeSpeed * travelTime);
+      const position = moveOnBattlefield(player.x, player.z, this.dodgeX * PLAYER_CONFIG.dodgeSpeed * travelTime, this.dodgeZ * PLAYER_CONFIG.dodgeSpeed * travelTime);
+      player.x = position.x; player.z = position.z;
       this.dodgeTimer = Math.max(0, this.dodgeTimer - dt);
       player.attackProgress = 0;
       return;
@@ -205,16 +221,16 @@ export class GameSession {
       else if (player.attackKind === 'normal' && player.attackProgress >= COMBAT_CONFIG.strongCancelProgress && this.strongBuffer > 0 && this.strongCooldown <= 1e-9) this.beginAttack('strong');
     }
     const moveSpeed = PLAYER_CONFIG.moveSpeed * (player.attackKind ? COMBAT_CONFIG.attackMoveFactor : 1);
-    player.x = clampPosition(player.x + mx * moveSpeed * dt);
-    player.z = clampPosition(player.z + mz * moveSpeed * dt);
+    const position = moveOnBattlefield(player.x, player.z, mx * moveSpeed * dt, mz * moveSpeed * dt);
+    player.x = position.x; player.z = position.z;
 
     if (player.attackKind) {
       const attack = this.attackDefinition();
       const lungeDuration = attack.duration * COMBAT_CONFIG.hitEnd;
       const lungeDt = Math.max(0, Math.min(dt, lungeDuration - this.attackTime));
       const lunge = attack.lunge * lungeDt / lungeDuration;
-      player.x = clampPosition(player.x + Math.sin(player.rotation) * lunge);
-      player.z = clampPosition(player.z + Math.cos(player.rotation) * lunge);
+      const lunged = moveOnBattlefield(player.x, player.z, Math.sin(player.rotation) * lunge, Math.cos(player.rotation) * lunge);
+      player.x = lunged.x; player.z = lunged.z;
       this.attackTime += dt;
       player.attackProgress = Math.min(1, this.attackTime / attack.duration);
       if (player.attackProgress >= 1 - 1e-9) {
@@ -262,7 +278,7 @@ export class GameSession {
       const enemy = this.enemies[id];
       const dx = enemy.x - player.x; const dz = enemy.z - player.z;
       const distance = Math.hypot(dx, dz);
-      if (enemy.hp <= 0 || distance < 0.6 || distance >= closest || !inAttackArc(dx, dz, player.rotation, COMBAT_CONFIG.targetAssistArc)) continue;
+      if (enemy.hp <= 0 || distance < 0.6 || distance >= closest || !inAttackArc(dx, dz, player.rotation, COMBAT_CONFIG.targetAssistArc) || !hasLineOfSight(player.x, player.z, enemy.x, enemy.z)) continue;
       closest = distance;
       targetRotation = Math.atan2(dx, dz);
     }
@@ -281,10 +297,11 @@ export class GameSession {
       if (enemy.state === 'inactive') continue;
       enemy.flash = Math.max(0, enemy.flash - dt);
       enemy.cooldown = Math.max(0, enemy.cooldown - dt);
+      const kind = ENEMY_KINDS[enemy.kind];
       if (enemy.state === 'dead' || enemy.state === 'knockback') {
         enemy.timer -= dt;
-        enemy.x = clampPosition(enemy.x + enemy.vx * dt);
-        enemy.z = clampPosition(enemy.z + enemy.vz * dt);
+        const knocked = moveOnBattlefield(enemy.x, enemy.z, enemy.vx * dt, enemy.vz * dt, enemy.scale * 0.4);
+        enemy.x = knocked.x; enemy.z = knocked.z;
         enemy.y = Math.max(0, enemy.y + enemy.vy * dt - 0.5 * ENEMY_CONFIG.gravity * dt * dt);
         enemy.vy -= ENEMY_CONFIG.gravity * dt;
         enemy.spin += enemy.angularVelocity * dt;
@@ -292,7 +309,7 @@ export class GameSession {
         const drag = Math.exp(-(enemy.y > 0 ? ENEMY_CONFIG.knockbackDrag : ENEMY_CONFIG.groundDrag) * dt);
         enemy.vx *= drag; enemy.vz *= drag;
         if (enemy.timer <= 1e-9 && enemy.y <= 0) {
-          if (enemy.state === 'dead') { enemy.state = 'inactive'; this.pool.release(enemy); }
+          if (enemy.state === 'dead') { enemy.state = 'inactive'; if (enemy.id >= this.totalCommanders) this.pool.release(enemy); }
           else { enemy.state = 'chase'; enemy.vx = 0; enemy.vz = 0; enemy.spin = 0; enemy.angularVelocity = 0; }
         }
         if (enemy.state !== 'dead' && enemy.state !== 'inactive') this.grid.update(enemy.id, enemy.x, enemy.z);
@@ -301,24 +318,40 @@ export class GameSession {
       const dx = this.player.x - enemy.x;
       const dz = this.player.z - enemy.z;
       const distance = Math.hypot(dx, dz);
+      if (enemy.kind !== 'commander' && distance > 65) {
+        enemy.state = 'inactive'; this.grid.remove(enemy.id); this.attackers.delete(enemy.id); this.pool.release(enemy); continue;
+      }
+      if (enemy.kind === 'commander' && distance > COMMANDER_CONFIG.aggroRadius) {
+        enemy.state = 'chase'; this.attackers.delete(enemy.id); continue;
+      }
       enemy.rotation = Math.atan2(dx, dz);
       if (enemy.state === 'windup') {
         enemy.timer -= dt;
         if (enemy.timer <= 1e-9) {
-          if (distance <= ENEMY_CONFIG.attackDistance) this.hitPlayer();
+          if (distance <= kind.reach && hasLineOfSight(enemy.x, enemy.z, this.player.x, this.player.z)) this.hitPlayer(kind.damage);
           enemy.state = 'chase';
-          enemy.cooldown = this.between(ENEMY_CONFIG.attackIntervalMin, ENEMY_CONFIG.attackIntervalMax);
+          enemy.cooldown = enemy.kind === 'commander' ? COMMANDER_CONFIG.attackCooldown : this.between(ENEMY_CONFIG.attackIntervalMin, ENEMY_CONFIG.attackIntervalMax);
           this.attackers.delete(enemy.id);
         }
         continue;
       }
-      if (distance <= ENEMY_CONFIG.attackDistance && enemy.cooldown <= 1e-9 && this.attackers.size < ENEMY_CONFIG.maxAttackers) {
-        enemy.state = 'windup'; enemy.timer = ENEMY_CONFIG.windup;
+      if (distance <= kind.reach && enemy.cooldown <= 1e-9 && this.attackers.size < ENEMY_CONFIG.maxAttackers && hasLineOfSight(enemy.x, enemy.z, this.player.x, this.player.z)) {
+        enemy.state = 'windup'; enemy.timer = kind.windup;
         this.attackers.add(enemy.id);
         continue;
       }
-      let vx = distance > ENEMY_CONFIG.attackDistance * 0.8 ? dx / Math.max(distance, 0.001) * enemy.speed : 0;
-      let vz = distance > ENEMY_CONFIG.attackDistance * 0.8 ? dz / Math.max(distance, 0.001) * enemy.speed : 0;
+      enemy.routeTimer -= dt;
+      if (enemy.routeTimer <= 0) {
+        // The hero can stand closer to walls than the route graph's clearance.
+        // Route to the adjacent open ground, then use exact hero distance for attacks.
+        const target = moveOnBattlefield(this.player.x, this.player.z, 0, 0, 1.2);
+        const waypoint = nextWaypoint(enemy.x, enemy.z, target.x, target.z);
+        enemy.waypointX = waypoint.x; enemy.waypointZ = waypoint.z; enemy.routeTimer = 0.35 + enemy.id % 5 * 0.03;
+      }
+      const routeX = enemy.waypointX - enemy.x; const routeZ = enemy.waypointZ - enemy.z;
+      const routeDistance = Math.max(0.01, Math.hypot(routeX, routeZ));
+      let vx = distance > kind.reach * 0.75 ? routeX / routeDistance * enemy.speed : 0;
+      let vz = distance > kind.reach * 0.75 ? routeZ / routeDistance * enemy.speed : 0;
       this.grid.queryRadius(enemy.x, enemy.z, ENEMY_CONFIG.separationRadius, this.nearby);
       for (const id of this.nearby) {
         if (id === enemy.id) continue;
@@ -335,17 +368,17 @@ export class GameSession {
       }
       const speed = Math.hypot(vx, vz);
       const limit = speed > enemy.speed * 1.5 ? enemy.speed * 1.5 / speed : 1;
-      enemy.x = clampPosition(enemy.x + vx * limit * dt);
-      enemy.z = clampPosition(enemy.z + vz * limit * dt);
+      const moved = moveOnBattlefield(enemy.x, enemy.z, vx * limit * dt, vz * limit * dt, enemy.scale * 0.4);
+      enemy.x = moved.x; enemy.z = moved.z;
       this.grid.update(enemy.id, enemy.x, enemy.z);
     }
   }
 
-  private hitPlayer(): void {
+  private hitPlayer(damage: number): void {
     const dodgeAge = PLAYER_CONFIG.dodgeDuration - this.dodgeTimer;
     const invincible = this.hitInvincible > 1e-9 || this.player.attackKind === 'skill' || (this.player.dodging && dodgeAge <= PLAYER_CONFIG.dodgeInvincibleDuration + 1e-9);
     if (invincible || this.player.hp <= 0) return;
-    this.player.hp = damageHp(this.player.hp, ENEMY_CONFIG.attackDamage);
+    this.player.hp = damageHp(this.player.hp, damage);
     this.hitInvincible = PLAYER_CONFIG.hitInvincibleDuration;
     this.player.hurt = true;
     this.events.push({ kind: 'playerHit', x: this.player.x, z: this.player.z });
@@ -364,28 +397,31 @@ export class GameSession {
       const enemy = this.enemies[id];
       if (this.hitEnemies.has(id) || enemy.hp <= 0) continue;
       const dx = enemy.x - player.x; const dz = enemy.z - player.z;
-      if (!inAttackArc(dx, dz, player.rotation, attack.arcDeg)) continue;
+      if (!inAttackArc(dx, dz, player.rotation, attack.arcDeg) || !hasLineOfSight(player.x, player.z, enemy.x, enemy.z)) continue;
       this.hitEnemies.add(id);
       enemy.hp = damageHp(enemy.hp, attack.damage);
       enemy.flash = 0.16;
       const distance = Math.hypot(dx, dz);
-      enemy.vx = (distance > 0.001 ? dx / distance : Math.sin(player.rotation)) * attack.knockback;
-      enemy.vz = (distance > 0.001 ? dz / distance : Math.cos(player.rotation)) * attack.knockback;
-      enemy.vy = attack.launch;
+      const kind = ENEMY_KINDS[enemy.kind];
+      const resistance = enemy.hp <= 0 ? 1 : kind.resistance;
+      enemy.vx = (distance > 0.001 ? dx / distance : Math.sin(player.rotation)) * attack.knockback * resistance;
+      enemy.vz = (distance > 0.001 ? dz / distance : Math.cos(player.rotation)) * attack.knockback * resistance;
+      enemy.vy = enemy.kind === 'commander' && enemy.hp > 0 ? 0 : attack.launch * resistance;
       enemy.angularVelocity = (enemy.id % 2 === 0 ? 1 : -1) * (player.attackKind === 'normal' ? 5 : 10);
-      this.attackers.delete(id);
+      if (enemy.kind !== 'commander' || enemy.hp <= 0) this.attackers.delete(id);
       this.comboSystem.hit();
       this.events.push({ kind: 'hit', x: enemy.x, z: enemy.z, attackKind: player.attackKind, attackStep: player.attackStep });
       if (enemy.hp === 0) {
         enemy.state = 'dead'; enemy.timer = ENEMY_CONFIG.deathDuration;
         this.grid.remove(id);
         this.kills++;
+        if (enemy.kind === 'commander') this.commandersDefeated++;
         this.events.push({ kind: 'death', x: enemy.x, z: enemy.z, attackKind: player.attackKind, attackStep: player.attackStep });
-      } else {
+      } else if (enemy.kind !== 'commander') {
         enemy.state = 'knockback'; enemy.timer = ENEMY_CONFIG.knockbackDuration;
       }
       // A skill spends the whole meter and does not immediately refill itself.
-      if (player.attackKind !== 'skill') player.power = Math.min(PLAYER_CONFIG.buddhistPowerMax, player.power + COMBAT_CONFIG.hitPower + (enemy.hp === 0 ? COMBAT_CONFIG.killPower : 0));
+      if (player.attackKind !== 'skill') player.power = Math.min(PLAYER_CONFIG.buddhistPowerMax, player.power + COMBAT_CONFIG.hitPower + (enemy.hp === 0 ? kind.powerReward : 0));
     }
   }
 
@@ -399,17 +435,23 @@ export class GameSession {
       const distance = this.between(SPAWN_CONFIG.minSpawnDistance, SPAWN_CONFIG.maxSpawnDistance);
       x = this.player.x + Math.sin(angle) * distance;
       z = this.player.z + Math.cos(angle) * distance;
-      if (Math.abs(x) <= STAGE_BOUND && Math.abs(z) <= STAGE_BOUND) { valid = true; break; }
+      if (Math.abs(x) <= STAGE_BOUND && Math.abs(z) <= STAGE_BOUND && isWalkable(x, z, 0.8)) { valid = true; break; }
     }
     if (!valid) {
-      const angle = Math.atan2(-this.player.x, -this.player.z);
-      x = this.player.x + Math.sin(angle) * SPAWN_CONFIG.minSpawnDistance;
-      z = this.player.z + Math.cos(angle) * SPAWN_CONFIG.minSpawnDistance;
+      this.pool.release(enemy); return;
     }
+    const roll = this.random();
+    this.initializeEnemy(enemy, roll < 0.75 ? 'grunt' : roll < 0.95 ? 'veteran' : 'elite', x, z);
+  }
+
+  private initializeEnemy(enemy: EnemyData, kind: EnemyKind, x: number, z: number): void {
+    const config = ENEMY_KINDS[kind];
     Object.assign(enemy, {
-      x, z, rotation: Math.atan2(this.player.x - x, this.player.z - z), hp: ENEMY_CONFIG.maxHp,
+      x, z, rotation: Math.atan2(this.player.x - x, this.player.z - z), hp: config.maxHp,
+      kind, maxHp: config.maxHp, scale: config.scale, name: kind === 'elite' ? '大鎧武者' : kind === 'veteran' ? '精鋭武者' : '落武者', outpostId: null,
+      routeTimer: 0, waypointX: x, waypointZ: z,
       state: 'chase', timer: 0, flash: 0, vx: 0, vz: 0, y: 0, vy: 0, spin: 0, angularVelocity: 0,
-      speed: this.between(ENEMY_CONFIG.moveSpeedMin, ENEMY_CONFIG.moveSpeedMax),
+      speed: this.between(ENEMY_CONFIG.moveSpeedMin, ENEMY_CONFIG.moveSpeedMax) * config.speedFactor,
       cooldown: this.between(0.3, ENEMY_CONFIG.attackIntervalMin),
     });
     this.grid.insert(enemy.id, x, z);

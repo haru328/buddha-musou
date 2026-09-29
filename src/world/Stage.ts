@@ -2,8 +2,9 @@ import { AdditiveBlending, BoxGeometry, CircleGeometry, Color, ConeGeometry, Cyl
 import type { BufferGeometry, Material } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { disposeScene } from '../utils/disposeScene';
+import { BATTLEFIELD } from './battlefield';
 
-/** An open courtyard: every substantial prop stays outside the combat bounds. */
+/** Four connected temple precincts, built from the same footprints used by collision. */
 export class Stage extends Group {
   private readonly flames: InstancedMesh;
   private readonly embers: InstancedMesh;
@@ -11,7 +12,7 @@ export class Stage extends Group {
   private readonly stoneTexture: DataTexture;
   private readonly smokeTexture: DataTexture;
   private readonly smoke: InstancedMesh;
-  private readonly fireSites = [[-25, -24], [25, -20], [-29, 10], [29, 5], [-17, -32], [18, -33]];
+  private readonly fireSites = [[-80, -64], [-49, -63], [-84, -28], [-50, -46], [-15, -35], [17, -34], [58, -59], [79, -58], [-40, 22], [42, 21], [-17, 91], [17, 91]];
 
   constructor() {
     super();
@@ -38,118 +39,113 @@ export class Stage extends Group {
       const mesh = new Mesh(box, material);
       mesh.position.set(x, y, z); mesh.scale.set(sx, sy, sz); this.add(mesh); return mesh;
     };
-    addBox(0, -0.35, 0, 70, 0.65, 70, darkStone);
-    // Slightly varied stone courses create texture without an external image.
-    const tiles = new InstancedMesh(box, stone, 400);
+    const earth = new MeshStandardMaterial({ color: 0x302d25, roughness: 1, map: this.stoneTexture });
+    addBox(0, -0.4, 0, BATTLEFIELD.bound * 2, 0.7, BATTLEFIELD.bound * 2, earth);
+    const road = (ax: number, az: number, bx: number, bz: number): void => {
+      const path = addBox((ax + bx) / 2, -0.03, (az + bz) / 2, 22, 0.06, Math.hypot(bx - ax, bz - az), stone);
+      path.rotation.y = Math.atan2(bx - ax, bz - az);
+      for (const side of [-1, 1]) {
+        const line = addBox((ax + bx) / 2 + Math.cos(path.rotation.y) * side * 10.5, 0.011, (az + bz) / 2 - Math.sin(path.rotation.y) * side * 10.5, 0.18, 0.015, Math.hypot(bx - ax, bz - az), bronze);
+        line.rotation.y = path.rotation.y;
+      }
+    };
+    for (const { from, to } of BATTLEFIELD.roads) road(from.x, from.z, to.x, to.z);
+    const tiles = new InstancedMesh(box, stone, BATTLEFIELD.zones.length * 196);
     const dummy = new Object3D();
-    for (let row = 0; row < 20; row++) for (let col = 0; col < 20; col++) {
-      const n = row * 20 + col;
-      dummy.position.set((col - 9.5) * 3.5, -0.065, (row - 9.5) * 3.5);
-      dummy.scale.set(3.45, 0.1, 3.45); dummy.updateMatrix(); tiles.setMatrixAt(n, dummy.matrix);
-      tiles.setColorAt(n, new Color().setHSL(0.09, 0.1 + (n % 3) * 0.035, 0.68 + Math.sin(n * 39.7) * 0.17));
+    let tileIndex = 0;
+    for (let zoneIndex = 0; zoneIndex < BATTLEFIELD.zones.length; zoneIndex++) {
+      const zone = BATTLEFIELD.zones[zoneIndex];
+      for (let row = 0; row < 14; row++) for (let col = 0; col < 14; col++) {
+        const n = row * 14 + col;
+        dummy.position.set(zone.x + (col - 6.5) * 3, -0.023, zone.z + (row - 6.5) * 3);
+        dummy.scale.set(2.95, 0.06, 2.95); dummy.updateMatrix(); tiles.setMatrixAt(tileIndex, dummy.matrix);
+        tiles.setColorAt(tileIndex++, new Color().setHSL(zoneIndex === 3 ? 0.18 : zoneIndex === 2 ? 0.57 : 0.08, 0.12, (zoneIndex === 3 ? 0.82 : 0.66) + Math.sin(n * 39.7) * 0.12));
+      }
+      const sealMaterial = new MeshBasicMaterial({ color: zoneIndex === 3 ? 0xaeb889 : 0xb89754, transparent: true, opacity: 0.38, depthWrite: false });
+      for (const radius of [6, 12, 19.5]) {
+        const seal = new Mesh(new RingGeometry(radius - 0.055, radius + 0.055, 96), sealMaterial);
+        seal.rotation.x = -Math.PI / 2; seal.position.set(zone.x, 0.018, zone.z); this.add(seal);
+      }
+      const disk = new Mesh(new CircleGeometry(2.5, zoneIndex === 3 ? 12 : 8), sealMaterial);
+      disk.rotation.x = -Math.PI / 2; disk.position.set(zone.x, 0.02, zone.z); this.add(disk);
     }
     this.add(tiles);
-    const sealMaterial = new MeshBasicMaterial({ color: 0x8e8157, transparent: true, opacity: 0.34, depthWrite: false });
-    for (const radius of [5.6, 6, 12, 25, 33.5]) {
-      const seal = new Mesh(new RingGeometry(radius - 0.035, radius + 0.035, 96), sealMaterial);
-      seal.rotation.x = -Math.PI / 2; seal.position.y = 0.008; this.add(seal);
-    }
-    const disk = new Mesh(new CircleGeometry(1.7, 8), new MeshBasicMaterial({ color: 0x8e8157, transparent: true, opacity: 0.18, depthWrite: false }));
-    disk.rotation.x = -Math.PI / 2; disk.position.y = 0.01; this.add(disk);
-    for (let n = -4; n <= 4; n++) {
-      for (const side of [-1, 1]) {
-        for (const axis of [0, 1]) {
-          const x = axis ? side * 34.2 : n * 8;
-          const z = axis ? n * 8 : side * 34.2;
-          if (axis === 0 && side === -1 && Math.abs(n) < 1) continue;
-          const height = 2.8 + ((n + 5) % 3) * 0.5;
-          addBox(x, 0.25, z, 1.7, 0.5, 1.7);
-          addBox(x, height / 2, z, 0.9, height, 0.9);
-          addBox(x, height, z, 1.4, 0.3, 1.4, darkStone);
-        }
-      }
-    }
-    // Torii and a distant roof establish the temple silhouette.
-    for (const x of [-5.2, 5.2]) {
-      addBox(x, 4.1, -35, 0.75, 8.2, 0.8, wood);
-      addBox(x, 0.4, -35, 1.15, 0.8, 1.15, darkStone);
-    }
-    addBox(0, 6.3, -35, 12.2, 0.5, 0.65, wood);
-    addBox(0, 8, -35, 14, 0.7, 1.25, darkStone);
-    addBox(0, 7.55, -35, 13.2, 0.35, 0.9, wood);
-    addBox(0, 7, -34.8, 1.1, 1.4, 0.3, bronze);
-    addBox(0, 2, -45, 16, 4, 8, darkStone);
-    const roof = new Mesh(new ConeGeometry(12, 4, 4), darkStone);
-    roof.rotation.y = Math.PI / 4; roof.scale.z = 0.65; roof.position.set(0, 6, -45); this.add(roof);
-    // Tiered tiled roofs, red colonnades and eave brackets form a complete burning temple.
     const makeHall = (x: number, z: number, width: number, depth: number, stories: number): void => {
-      addBox(x, 0.3, z, width + 2, 0.6, depth + 2, darkStone);
+      addBox(x, 0.35, z, width, 0.7, depth, darkStone);
       for (let level = 0; level < stories; level++) {
-        const y = level * 4.4;
-        const w = width * (1 - level * 0.15);
-        addBox(x, y + 2, z, w * 0.85, 3.6, depth * 0.8, wood);
+        const y = level * 4.4, w = width * (1 - level * 0.14);
+        addBox(x, y + 2.1, z, w * 0.84, 3.6, depth * 0.8, wood);
         for (const sign of [-1, 1]) for (let n = -2; n <= 2; n++) {
-          addBox(x + n * w / 5, y + 2.1, z + sign * depth * 0.45, 0.35, 4, 0.4, wood);
-          addBox(x + n * w / 5, y + 3.65, z + sign * depth * 0.45, 0.9, 0.25, 1.1, bronze);
+          addBox(x + n * w / 5, y + 2.1, z + sign * depth * 0.43, 0.4, 4, 0.4, wood);
+          addBox(x + n * w / 5, y + 3.65, z + sign * depth * 0.43, 1, 0.25, 1.3, bronze);
         }
         for (let tier = 0; tier < 3; tier++) {
           const section = new Mesh(new ConeGeometry(1, 1, 4), darkStone);
           section.rotation.y = Math.PI / 4;
-          section.scale.set((w + 3 - tier * 1.8) / Math.SQRT2, 1.9 - tier * 0.3, (depth + 3 - tier * 1.2) / Math.SQRT2);
-          section.position.set(x, y + 4.1 + tier * 0.48, z); this.add(section);
+          section.scale.set((w + 3 - tier * 1.8) / Math.SQRT2, 2 - tier * 0.3, (depth + 3 - tier * 1.2) / Math.SQRT2);
+          section.position.set(x, y + 4.2 + tier * 0.48, z); this.add(section);
         }
-        addBox(x, y + 5.5, z, w * 0.9, 0.12, 0.25, bronze);
-        for (const sign of [-1, 1]) {
-          const finial = new Mesh(new ConeGeometry(0.19, 0.95, 6), bronze);
-          finial.position.set(x + sign * w * 0.5, y + 5.45, z); finial.rotation.z = sign * -0.45; this.add(finial);
-        }
+        addBox(x, y + 5.6, z, w * 0.9, 0.15, 0.3, bronze);
       }
     };
-    makeHall(0, -39, 22, 10, 2);
-    makeHall(-35, -24, 11, 13, 3);
-    makeHall(35, -25, 11, 13, 3);
-    makeHall(-36, 10, 10, 18, 1);
-    makeHall(36, 10, 10, 18, 1);
-    const banner = new MeshStandardMaterial({ color: 0x9e160d, roughness: 0.9 });
-    for (const side of [-1, 1]) for (const z of [-29, -13, 8, 26]) {
-      const x = side * 28.8;
-      addBox(x, 3.4, z, 0.12, 6.8, 0.12, bronze);
-      addBox(x + side * 0.75, 6.4, z, 1.7, 0.12, 0.12, bronze);
-      addBox(x + side * 0.75, 4.9, z, 1.4, 2.8, 0.035, banner);
-      addBox(x + side * 0.75, 4.9, z + 0.03, 0.13, 1.9, 0.03, bronze);
-      addBox(x + side * 0.75, 5.1, z + 0.03, 0.7, 0.14, 0.03, bronze);
-      // Uneven cloth tails provide a war-torn edge.
-      for (let n = 0; n < 4; n++) addBox(x + side * (0.21 + n * 0.35), 3.3 - (n % 2) * 0.18, z, 0.28, 0.6, 0.035, banner);
+    for (const obstacle of BATTLEFIELD.obstacles) {
+      const { x, z, halfX, halfZ, kind } = obstacle;
+      if (kind === 'hall') {
+        makeHall(x, z, halfX * 2, halfZ * 2, x === 65 ? 4 : z === 99 ? 1 : 2);
+        // War banners and lanterns sit on the same blocked foundation as the hall.
+        for (const side of [-1, 1]) {
+          addBox(x + side * (halfX - 1), 3.8, z + halfZ - 0.7, 0.12, 7.6, 0.12, bronze);
+          addBox(x + side * (halfX - 1), 5.3, z + halfZ - 0.6, 1.4, 3.2, 0.05, wood);
+          const lamp = new Mesh(box, glow); lamp.position.set(x + side * (halfX - 2.5), 2, z + halfZ - 0.5); lamp.scale.set(0.65, 0.8, 0.4); this.add(lamp);
+        }
+      } else if (kind === 'wall') {
+        addBox(x, 2, z, halfX * 2, 4, halfZ * 2, stone);
+        addBox(x, 4.2, z, halfX * 2 + 0.8, 0.4, halfZ * 2 + 0.8, darkStone);
+        const alongX = halfX > halfZ;
+        for (let i = -2; i <= 2; i++) addBox(x + (alongX ? i * halfX / 2.5 : 0), 2.3, z + (alongX ? 0 : i * halfZ / 2.5), alongX ? 0.6 : halfX * 2 + 0.2, 4.6, alongX ? halfZ * 2 + 0.2 : 0.6, wood);
+      } else if (kind === 'rock') {
+        // A low plinth exactly matches collision; clustered crags break its silhouette.
+        addBox(x, 0.35, z, halfX * 2, 0.7, halfZ * 2, darkStone);
+        for (let n = 0; n < 5; n++) {
+          const rock = new Mesh(new OctahedronGeometry(1, 1), stone);
+          rock.position.set(x + Math.sin(n * 2.3) * halfX * 0.4, 1.5 + n % 3, z + Math.cos(n * 3.1) * halfZ * 0.4);
+          rock.scale.set(halfX * 0.5, 3 + n % 3, halfZ * 0.5); rock.rotation.y = n; this.add(rock);
+        }
+      } else {
+        addBox(x, 0.35, z, halfX * 2, 0.7, halfZ * 2, darkStone);
+        addBox(x, 4.1, z, 0.9, 8.2, 0.9, wood);
+      }
     }
-    // Charred timbers and collapsed masonry stay toward the perimeter.
-    for (let n = 0; n < 42; n++) {
-      const side = n % 2 ? 1 : -1;
-      const rubble = addBox(side * (27 + n % 6), 0.25, -31 + ((n * 13) % 64), 0.4 + n % 3, 0.5, 0.6, n % 3 ? darkStone : wood);
-      rubble.rotation.y = n * 2.17; rubble.rotation.z = (n % 3) * 0.08;
+    for (const zone of [{ x: 0, z: -43 }, ...BATTLEFIELD.outposts]) {
+      addBox(zone.x, 6.8, zone.z + 18, 26, 0.45, 0.9, wood);
+      addBox(zone.x, 8.3, zone.z + 18, 28, 0.65, 1.45, darkStone);
+      addBox(zone.x, 7.5, zone.z + 18.3, 1.4, 1.6, 0.3, bronze);
     }
-    // Stone lanterns are decorative, with emissive windows rather than per-prop lights.
-    for (const x of [-31, 31]) for (const z of [-27, -12, 12, 27]) {
-      addBox(x, 0.15, z, 1.7, 0.3, 1.7);
-      addBox(x, 1.05, z, 0.55, 1.8, 0.55);
-      addBox(x, 1.9, z, 1.3, 0.2, 1.3);
-      const window = new Mesh(box, glow); window.position.set(x, 2.25, z); window.scale.set(0.65, 0.6, 0.65); this.add(window);
-      const top = new Mesh(new ConeGeometry(1.15, 0.65, 4), darkStone); top.rotation.y = Math.PI / 4; top.position.set(x, 2.9, z); this.add(top);
+    // Eastern bell tower and southern lotus engraving are navigation landmarks.
+    const bell = new Mesh(new CylinderGeometry(1.2, 1.9, 2.7, 20), bronze);
+    bell.position.set(65, 10.2, -59.7); this.add(bell);
+    const bellRim = new Mesh(new TorusGeometry(1.9, 0.15, 8, 32), bronze);
+    bellRim.rotation.x = Math.PI / 2; bellRim.position.set(65, 8.9, -59.7); this.add(bellRim);
+    for (let n = 0; n < 12; n++) {
+      const petal = new Mesh(new RingGeometry(3, 3.1, 32, 1, 0, Math.PI), bronze);
+      const angle = n / 12 * Math.PI * 2;
+      petal.rotation.set(-Math.PI / 2, 0, angle); petal.position.set(Math.sin(angle) * 4, 0.025, 70 + Math.cos(angle) * 4); this.add(petal);
     }
-    // Low outer curb marks the traversable boundary without filling the arena.
+    // Outer enclosure is just beyond the movement clamp, without invisible inner fences.
+    const bound = BATTLEFIELD.bound;
     for (const sign of [-1, 1]) {
-      addBox(sign * 34.8, 0.12, 0, 0.35, 0.3, 70);
-      addBox(0, 0.12, sign * 34.8, 70, 0.3, 0.35);
+      addBox(sign * (bound + 0.5), 1.5, 0, 1, 3, bound * 2 + 2, darkStone);
+      addBox(0, 1.5, sign * (bound + 0.5), bound * 2, 3, 1, darkStone);
     }
-    const boundary = new Mesh(new TorusGeometry(0.9, 0.05, 6, 32), bronze);
-    boundary.position.set(0, 7, -34.55); this.add(boundary);
-    // Tall fragments beyond the court disappear naturally into scene fog.
-    const columnGeometry = new CylinderGeometry(0.5, 0.8, 1, 6);
-    for (let n = 0; n < 20; n++) {
-      const angle = n * Math.PI * 2 / 20;
-      const height = 4 + (n % 4) * 2;
-      const column = new Mesh(columnGeometry, darkStone);
-      column.position.set(Math.cos(angle) * 44, height / 2, Math.sin(angle) * 44);
-      column.scale.y = height; column.rotation.z = Math.sin(n * 4) * 0.12; this.add(column);
+    for (let n = -5; n <= 5; n++) for (const side of [-1, 1]) {
+      addBox(n * 20, 3, side * 106, 1.8, 6, 1.8, stone);
+      addBox(side * 106, 3, n * 20, 1.8, 6, 1.8, stone);
+    }
+    // Mountain silhouettes sit outside the playable enclosure.
+    for (let n = 0; n < 24; n++) {
+      const angle = n / 24 * Math.PI * 2;
+      const peak = new Mesh(new ConeGeometry(16 + n % 4 * 4, 24 + n % 5 * 7, 5), darkStone);
+      peak.position.set(Math.cos(angle) * 145, 6, Math.sin(angle) * 145); peak.rotation.y = n; this.add(peak);
     }
     // Static props collapse to one draw call per material, keeping the crowd cheap.
     const batches = new Map<Material, BufferGeometry[]>();
@@ -157,7 +153,9 @@ export class Stage extends Group {
     for (const child of [...this.children]) {
       if (!(child instanceof Mesh) || child instanceof InstancedMesh || Array.isArray(child.material)) continue;
       child.updateMatrix();
-      const geometry = child.geometry.clone().applyMatrix4(child.matrix);
+      // Polyhedron geometry is non-indexed, while boxes/cylinders are indexed.
+      // Normalize owned copies before merging so a rock cannot drop the entire stone batch.
+      const geometry = (child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone()).applyMatrix4(child.matrix);
       const batch = batches.get(child.material) ?? [];
       batch.push(geometry); batches.set(child.material, batch);
       if (child.geometry !== box) retired.add(child.geometry);

@@ -7,6 +7,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GRAPHICS_CONFIG } from '../config/graphics';
 import { InputManager } from '../core/InputManager';
+import { HeadingMovement } from '../core/HeadingMovement';
 import { Stage } from '../world/Stage';
 import { PlayerRenderer } from '../player/PlayerRenderer';
 import { EnemyRenderer } from '../enemy/EnemyRenderer';
@@ -25,6 +26,8 @@ export class Game {
   private readonly environment: WebGLRenderTarget;
   private readonly scene = new Scene();
   private readonly camera = new ThirdPersonCamera();
+  private readonly movement = new HeadingMovement();
+  private readonly sunlight = new DirectionalLight(0xffd49a, 3.1);
   private readonly session = new GameSession();
   private readonly stage = new Stage();
   private readonly hero = new PlayerRenderer();
@@ -68,7 +71,7 @@ export class Game {
     this.renderer.domElement.setAttribute('role', 'img');
     this.scene.background = new Color(GRAPHICS_CONFIG.background);
     this.scene.fog = new Fog(GRAPHICS_CONFIG.background, GRAPHICS_CONFIG.fogNear, GRAPHICS_CONFIG.fogFar);
-    const sunlight = new DirectionalLight(0xffd49a, 3.1);
+    const sunlight = this.sunlight;
     sunlight.position.set(-12, 22, 10);
     sunlight.castShadow = true;
     sunlight.shadow.mapSize.set(2048, 2048);
@@ -77,7 +80,7 @@ export class Game {
     sunlight.shadow.normalBias = 0.06;
     const rimLight = new DirectionalLight(0xff6730, 2.2);
     rimLight.position.set(8, 9, -15);
-    this.scene.add(new HemisphereLight(0xe7d3b6, 0x28181d, 1.1), sunlight, rimLight, this.stage, this.hero, this.enemies, this.effects);
+    this.scene.add(new HemisphereLight(0xe7d3b6, 0x28181d, 1.1), sunlight, sunlight.target, rimLight, this.stage, this.hero, this.enemies, this.effects);
     for (const object of [this.stage, this.hero, this.enemies]) object.traverse((child) => {
       if (child instanceof Mesh && child.material instanceof MeshStandardMaterial) {
         child.castShadow = object !== this.stage;
@@ -102,7 +105,7 @@ export class Game {
     window.addEventListener('blur', this.onBlur);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
     this.updateVisuals(0);
-    this.ui.update(this.session, this.stats);
+    this.ui.update(this.session, this.stats, this.camera.heading);
   }
 
   start(): void {
@@ -138,16 +141,17 @@ export class Game {
     this.audio.unlock();
     this.session.start();
     this.resetVisuals();
-    this.ui.update(this.session, this.stats);
+    this.ui.update(this.session, this.stats, this.camera.heading);
   };
 
   private resetVisuals(): void {
     this.input.clear();
+    this.movement.reset();
     this.effects.reset();
     this.hero.reset();
     this.visualTime = 0;
     this.hitStop = 0; this.slowMotion = 0; this.lastImpactAttack = -1; this.attackHitCount = 0;
-    this.camera.follow(this.session.player.x, this.session.player.z, 0, true);
+    this.camera.follow(this.session.player.x, this.session.player.z, 0, true, this.session.player.rotation);
     this.updateVisuals(0);
   }
 
@@ -155,21 +159,23 @@ export class Game {
     this.session.pause();
     this.audio.pause();
     this.input.clear();
-    this.ui.update(this.session, this.stats);
+    this.movement.reset();
+    this.ui.update(this.session, this.stats, this.camera.heading);
   }
 
   private resume(): void {
     this.session.resume();
     this.audio.unlock();
     this.input.clear();
-    this.ui.update(this.session, this.stats);
+    this.movement.reset();
+    this.ui.update(this.session, this.stats, this.camera.heading);
   }
 
   private returnToTitle(): void {
     this.audio.pause();
     this.session.returnToTitle();
     this.resetVisuals();
-    this.ui.update(this.session, this.stats);
+    this.ui.update(this.session, this.stats, this.camera.heading);
   }
 
   private readonly update = (dt: number): void => {
@@ -180,6 +186,11 @@ export class Game {
       else if (this.session.state === 'paused') this.resume();
     }
     if (this.input.consume('Enter') && (this.session.state === 'title' || this.session.state === 'result')) this.newBattle();
+    if (this.session.state === 'playing') {
+      const orbit = Number(this.input.isDown('KeyQ')) - Number(this.input.isDown('KeyE'));
+      if (orbit) { this.camera.orbit(orbit * dt * 1.8); this.movement.reset(); }
+      if (this.input.consume('KeyC')) { this.camera.recenter(this.session.player.rotation); this.movement.reset(); }
+    }
     const frozen = this.session.state === 'playing' && this.hitStop > 0;
     if (this.session.state === 'playing') {
       this.hitStop = Math.max(0, this.hitStop - dt);
@@ -187,8 +198,11 @@ export class Game {
     }
     const simulationDt = frozen ? 0 : dt * (this.slowMotion > 0 ? 0.38 : 1);
     if (!frozen) {
-      this.command.moveX = Number(this.input.isDown('KeyD', 'ArrowRight')) - Number(this.input.isDown('KeyA', 'ArrowLeft'));
-      this.command.moveZ = Number(this.input.isDown('KeyS', 'ArrowDown')) - Number(this.input.isDown('KeyW', 'ArrowUp'));
+      const right = Number(this.input.isDown('KeyD', 'ArrowRight')) - Number(this.input.isDown('KeyA', 'ArrowLeft'));
+      const back = Number(this.input.isDown('KeyS', 'ArrowDown')) - Number(this.input.isDown('KeyW', 'ArrowUp'));
+      const direction = this.movement.update(right, back, this.camera.heading);
+      this.command.moveX = direction.x;
+      this.command.moveZ = direction.z;
       this.command.attack = this.input.consume('KeyJ') || this.input.isDown('KeyJ');
       this.command.strong = this.input.consume('KeyK');
       this.command.skill = this.input.consume('KeyL');
@@ -225,21 +239,28 @@ export class Game {
     this.uiTimer += dt;
     if (this.uiTimer >= 0.1) {
       this.uiTimer = 0;
-      this.ui.update(this.session, this.stats);
+      this.ui.update(this.session, this.stats, this.camera.heading);
     }
   };
 
   private updateVisuals(dt: number, realDt = dt): void {
+    this.sunlight.position.set(this.session.player.x - 12, 22, this.session.player.z + 10);
+    this.sunlight.target.position.set(this.session.player.x, 0, this.session.player.z);
     this.stage.update(dt, this.visualTime);
     this.hero.update(dt, this.session.player);
-    this.enemies.update(this.session.enemies, this.visualTime);
-    this.effects.update(realDt);
+    this.enemies.update(this.session.enemies, this.visualTime, this.camera.heading, this.camera.position);
+    this.effects.update(realDt, this.camera.heading);
     if (this.session.state === 'title') {
       this.hero.rotation.y = 0.4;
       this.camera.position.set(4.8, 3.8, 7.4);
       this.camera.lookAt(-1.9, 1.85, 0);
     } else {
-      this.camera.follow(this.session.player.x, this.session.player.z, realDt);
+      const travelHeading = this.session.state === 'playing'
+        ? this.session.player.dodging ? this.session.player.rotation
+          : this.session.player.moving && Math.hypot(this.command.moveX, this.command.moveZ) > 0
+            ? Math.atan2(this.command.moveX, this.command.moveZ) : undefined
+        : undefined;
+      this.camera.follow(this.session.player.x, this.session.player.z, realDt, false, travelHeading);
     }
   }
 

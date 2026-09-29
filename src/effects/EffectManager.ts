@@ -101,7 +101,7 @@ export class EffectManager extends Group {
     }
   }
 
-  update(dt: number): void {
+  update(dt: number, cameraHeading = Math.PI): void {
     for (const slot of this.slots) {
       if (!slot.active) continue;
       slot.age += dt;
@@ -131,6 +131,7 @@ export class EffectManager extends Group {
       const progress = this.sealAge / 1.15;
       this.seal.scale.setScalar(1 + Math.min(1, progress * 5) * 6);
       this.seal.rotation.z = progress * 0.25;
+      this.seal.rotation.y = cameraHeading + Math.PI;
       this.seal.material.opacity = Math.min(1, progress * 12) * (1 - progress);
     } else this.seal.visible = false;
   }
